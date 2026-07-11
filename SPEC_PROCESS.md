@@ -351,6 +351,23 @@
 
 ---
 
+## Gate B — PLAN 创建记录
+
+**时间**：2026-07-11
+**事件**：用户批准 SPEC.md 后，加载 Superpowers `writing-plans` 技能，生成 PLAN.md。
+
+**PLAN.md 概况**：
+- 29 个 task（T01-T29），每个含 12 项必填字段
+- 13 个 worktree/PR（PR1-PR13）
+- 依赖图 + 并行计划
+- 覆盖：agent 主循环 / LLM 抽象+mock / 工具分发 / 记忆 / 治理+HITL / 反馈闭环 / 配置 / 凭据 / mock-LLM 单测 / 机制演示 / CI / 分发 / README / WebUI/部署 / 最终验收
+- 每个 task 含 TDD 红绿重构验证命令
+- REQUIREMENTS_CHECKLIST.md 已回填 PLAN Task 映射
+
+**当前状态**：PLAN.md 已创建，等待用户审阅。用户要求暂不 commit/push。
+
+---
+
 ## SPEC 人工批准记录
 
 **时间**：2026-07-11

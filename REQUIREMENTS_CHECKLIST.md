@@ -206,3 +206,52 @@
 - 所有已识别的硬性要求在 SPEC.md 中均有对应章节覆盖；
 - SPEC.md 待用户审查通过后，R013/R014/R015 状态更新为 DONE；
 - 其余实现类需求（R016-R063）在 PLAN.md 创建后回填 PLAN Task ID。
+
+### PLAN Task 映射
+
+| 需求 ID | PLAN Task | 说明 |
+|---|---|---|
+| R001 | 全局 | 过程纪律：禁止提前实现 |
+| R002-R003 | 全局 | Superpowers 工作流 |
+| R004-R005 | SPEC_PROCESS.md | brainstorming 记录 |
+| R006-R007 | Gate C | 冷启动验证 |
+| R008 | 全局 PR1-PR13 | worktree 隔离 |
+| R009 | 全局 T01-T29 | subagent 驱动 |
+| R010 | 全局 T01-T29 | TDD 红绿重构 |
+| R011 | 全局 T01-T29 | 两阶段评审 |
+| R012 | 全局 PR1-PR13 | finishing-a-development-branch |
+| R013 | SPEC.md §1-§11 | SPEC 10 节 |
+| R014 | SPEC.md §9 | 领域与机制设计 |
+| R015 | SPEC.md §10 | 验收标准 |
+| R016-R017 | PLAN.md | PLAN task 粒度与依赖 |
+| R018 | PLAN.md | PLAN 持续更新 |
+| R019 | SPEC_PROCESS.md | 过程文档 |
+| R020 | AGENT_LOG.md | 开发日志 |
+| R021 | T27 | README |
+| R022-R023 | T29 | REFLECTION（人工撰写） |
+| R024-R031 | T17 | 凭据安全 |
+| R032-R035 | T26 | 分发 |
+| R036-R037 | T28 | 部署与 WebUI |
+| R038 | T18 | agent 主循环 |
+| R039 | T03-T05 | LLM 抽象 + mock |
+| R040-R041 | T03, T05 | 底层零件 + 无高层框架 |
+| R042 | T12-T16 | 反馈=代码 |
+| R043 | T09-T11 | 治理=代码 |
+| R044 | T22 | mock-LLM 确定性单测 |
+| R045 | SPEC.md §5.3 | 内容物不计入 |
+| R046 | T02,T06-T08,T09-T11,T12-T16,T17 | 六维度最低 |
+| R047 | T12-T16 | 反馈闭环深入 |
+| R048 | T14 | 记忆自实现 |
+| R049 | SPEC.md §9 | 四类机制 |
+| R050 | T01-T17 | ≥3 功能模块 |
+| R051 | T01 (Makefile) | 一键测试 |
+| R052 | T24 | GitHub Actions |
+| R053 | T22 | mock-LLM 单测 |
+| R054 | T23 | 机制演示 |
+| R055-R057 | 全局 PR1-PR13 | GitHub 仓库与 PR |
+| R058 | T25 | .gitlab-ci.yml unit-test |
+| R059 | T29 | CI/CD pass |
+| R060 | 全局 | NJU Git 提交 |
+| R061 | 全局 | 手写代码注释 |
+| R062 | T27 | 第三方许可证 |
+| R063 | T29 | 无凭据泄露 |
