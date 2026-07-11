@@ -1,0 +1,39 @@
+# Credentials
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+secrets/
+credentials/
+auth.json
+
+# Local OpenCode/provider configuration
+opencode.local.json
+opencode.local.jsonc
+
+# Logs and temporary files
+*.log
+logs/
+tmp/
+.cache/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Node
+node_modules/
+dist/
+coverage/
+
+# IDE
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
