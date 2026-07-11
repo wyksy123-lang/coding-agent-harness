@@ -1,24 +1,23 @@
 from __future__ import annotations
 
-import pytest
-from dataclasses import is_dataclass, fields
+from dataclasses import is_dataclass
 from datetime import datetime
 from enum import Enum
 
 from harness.models import (
-    FailureType,
-    RoundOutcome,
-    StopReason,
-    HITLStatus,
-    GuardResult,
-    Config,
     Action,
-    TestResult,
+    Config,
     Failure,
+    FailureType,
     FeedbackMessage,
-    RoundRecord,
+    GuardResult,
     HITLRequest,
+    HITLStatus,
     MemoryEntry,
+    RoundOutcome,
+    RoundRecord,
+    StopReason,
+    TestResult,
 )
 
 
@@ -84,11 +83,24 @@ class TestConfig:
 
     def test_config_default_enabled_tools(self):
         config = Config()
-        assert config.enabled_tools == []
+        assert config.enabled_tools == [
+            "write_file",
+            "read_file",
+            "list_files",
+            "run_tests",
+            "run_command",
+            "finish",
+        ]
 
     def test_config_default_dangerous_command_patterns(self):
         config = Config()
-        assert config.dangerous_command_patterns == []
+        assert config.dangerous_command_patterns == [
+            r"rm\s+-rf",
+            r"git\s+push",
+            r"sudo\s+",
+            r"curl\s+|wget\s+",
+            r"docker\s+",
+        ]
 
     def test_config_custom_values(self):
         config = Config(
@@ -138,6 +150,15 @@ class TestConfig:
 
     def test_config_is_dataclass(self):
         assert is_dataclass(Config)
+
+    def test_config_mutable_defaults_isolated(self):
+        """Two Config instances must not share mutable default lists."""
+        c1 = Config()
+        c2 = Config()
+        assert c1.enabled_tools is not c2.enabled_tools
+        assert c1.dangerous_command_patterns is not c2.dangerous_command_patterns
+        c1.enabled_tools.append("extra_tool")
+        assert "extra_tool" not in c2.enabled_tools
 
 
 class TestAction:

@@ -1,11 +1,12 @@
 from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
-from typing import Any, Optional
+from enum import Enum, StrEnum
+from typing import Any
 
 
-class FailureType(str, Enum):
+class FailureType(StrEnum):
     ASSERTION = "ASSERTION"
     SYNTAX = "SYNTAX"
     IMPORT = "IMPORT"
@@ -41,6 +42,24 @@ class GuardResult(Enum):
     PENDING = "PENDING"
 
 
+_DEFAULT_ENABLED_TOOLS: list[str] = [
+    "write_file",
+    "read_file",
+    "list_files",
+    "run_tests",
+    "run_command",
+    "finish",
+]
+
+_DEFAULT_DANGEROUS_PATTERNS: list[str] = [
+    r"rm\s+-rf",
+    r"git\s+push",
+    r"sudo\s+",
+    r"curl\s+|wget\s+",
+    r"docker\s+",
+]
+
+
 @dataclass
 class Config:
     max_rounds: int = 10
@@ -49,8 +68,12 @@ class Config:
     model: str = "deepseek-chat"
     temperature: float = 0.1
     memory_file: str = ".harness/memory.json"
-    enabled_tools: list = field(default_factory=list)
-    dangerous_command_patterns: list = field(default_factory=list)
+    enabled_tools: list[str] = field(
+        default_factory=lambda: list(_DEFAULT_ENABLED_TOOLS)
+    )
+    dangerous_command_patterns: list[str] = field(
+        default_factory=lambda: list(_DEFAULT_DANGEROUS_PATTERNS)
+    )
     hitl_timeout_seconds: int = 300
     llm_timeout: int = 60
     pytest_timeout: int = 60
@@ -61,20 +84,13 @@ class Config:
 @dataclass
 class Action:
     tool_name: str
-    args: dict
-    raw_tool_call: Optional[Any] = None
-
-
-@dataclass
-class TestResult:
-    status: str
-    failures: list
-    summary: dict
+    args: dict[str, Any]
+    raw_tool_call: Any | None = None
 
 
 @dataclass
 class Failure:
-    type: str
+    type: FailureType
     test_name: str
     message: str
     file: str
@@ -84,17 +100,43 @@ class Failure:
 
 
 @dataclass
+class TestResult:
+    """Result of running the test suite.
+
+    Note: ``__test__ = False`` tells pytest not to collect this
+    dataclass as a test class (it starts with ``Test``).
+    """
+
+    __test__ = False
+
+    status: str
+    failures: list[Failure]
+    summary: dict[str, Any]
+
+
+@dataclass
+class MemoryEntry:
+    session_id: str
+    round: int
+    failure_type: FailureType
+    test_name: str
+    message: str
+    strategy_used: str
+    outcome: str
+
+
+@dataclass
 class FeedbackMessage:
-    failure_type: str
+    failure_type: FailureType
     details: str
     strategy_hint: str
-    relevant_memory: list
+    relevant_memory: list[MemoryEntry]
 
 
 @dataclass
 class RoundRecord:
     round_number: int
-    actions: list
+    actions: list[Action]
     failure_fingerprint: str
     strategy_used: str
     outcome: RoundOutcome
@@ -106,14 +148,3 @@ class HITLRequest:
     status: HITLStatus
     timestamp: datetime
     decision: str
-
-
-@dataclass
-class MemoryEntry:
-    session_id: str
-    round: int
-    failure_type: str
-    test_name: str
-    message: str
-    strategy_used: str
-    outcome: str
