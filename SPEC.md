@@ -274,6 +274,38 @@ PENDING --timeout-------> TIMEOUT --feedback to agent--> RESUME
 | `stuck_threshold` | int | 3 | `RoundTracker.detect_loop()` 卡死阈值 |
 | `llm_retry_count` | int | 3 | `AgentLoop` LLM 调用重试次数 |
 
+`harness.yaml.example` 完整示例：
+
+```yaml
+# harness.yaml — 所有配置项均为扁平 snake_case 键
+max_rounds: 10
+target_directory: ./workspace
+test_command: "pytest --json-report --output=.harness/report.json"
+model: "deepseek-chat"
+temperature: 0.1
+memory_file: ".harness/memory.json"
+enabled_tools:
+  - write_file
+  - read_file
+  - list_files
+  - run_tests
+  - run_command
+  - finish
+dangerous_command_patterns:
+  - "rm\\s+-rf"
+  - "git\\s+push"
+  - "sudo\\s+"
+  - "curl\\s+|wget\\s+"
+  - "docker\\s+"
+hitl_timeout_seconds: 300
+llm_timeout: 60
+pytest_timeout: 60
+stuck_threshold: 3
+llm_retry_count: 3
+```
+
+> 所有 YAML 键名与上表配置项名称一致，均为扁平 snake_case，无嵌套。
+
 ### 3.7 凭据管理
 
 | 项 | 描述 |
@@ -539,7 +571,7 @@ erDiagram
         list actions
         str failure_fingerprint
         str strategy_used
-        str outcome
+        RoundOutcome outcome
     }
     
     HITLRequest {
@@ -558,6 +590,13 @@ erDiagram
         str strategy_used
         str outcome
     }
+    
+    RoundOutcome {
+        PASS
+        FAIL
+        NO_TESTS
+        HITL_DENIED
+    }
 ```
 
 ### 6.2 字段约束
@@ -572,6 +611,7 @@ erDiagram
 | Config | pytest_timeout | int | > 0 |
 | Config | stuck_threshold | int | > 0 |
 | Config | llm_retry_count | int | > 0 |
+| RoundRecord | outcome | enum | ∈ RoundOutcome {PASS, FAIL, NO_TESTS, HITL_DENIED} |
 | Failure | type | enum | ∈ {ASSERTION, SYNTAX, IMPORT, RUNTIME, TIMEOUT, COLLECTION} |
 | RoundRecord | round_number | int | > 0, 单调递增 |
 | RoundRecord | failure_fingerprint | str | 失败类型+测试名+消息的哈希 |

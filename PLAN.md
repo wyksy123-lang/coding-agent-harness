@@ -3,6 +3,8 @@
 > 由 Superpowers `writing-plans` 技能驱动，基于人工批准的 `SPEC.md` 生成。
 > 每个 task 颗粒度可由一个 subagent 在一次会话内完成，每步 2–5 分钟。
 > 严格遵循 TDD：红 → 绿 → 重构。
+>
+> **TDD 顺序强制**：每个 task 必须先编写失败测试文件，运行并确认红色失败（Red），再编写实现代码使测试通过（Green），最后重构并重新运行全部测试。**禁止先写实现再补测试。** 如果 subagent 先写了实现代码，必须删除后从测试重新开始。
 
 ---
 
@@ -88,9 +90,26 @@ T29 (final acceptance) ← depends on all
 4. **预期实现要点**:
    - `pyproject.toml`: 项目元数据、依赖（httpx, pyyaml, keyring, fastapi, uvicorn, websockets, pytest, pytest-json-report, ruff, mypy）、ruff 和 mypy 配置
    - `Makefile`: `test`, `test-unit`, `test-mock`, `lint`, `typecheck`, `demo`, `build` targets
-   - `harness/models.py`: 用 `dataclass` 和 `Enum` 定义 SPEC §6.1 中所有实体
-   - `tests/conftest.py`: 公共 fixtures（tmp_workspace, mock_config）
-5. **需要先编写的失败测试**: `tests/unit/test_models.py` — 测试每个 dataclass 可正确实例化、字段类型正确、枚举值完整
+   - `harness/models.py`: 用 `dataclass` 和 `Enum` 定义 SPEC §6.1 中所有实体，包括：
+     - `Config`（13 个字段，见 SPEC §3.6.1 配置表）
+     - `Action`（tool_name, args, raw_tool_call）
+     - `TestResult`（status, failures, summary）
+     - `Failure`（type, test_name, message, file, line, expected, actual）
+     - `FailureType`（enum: ASSERTION, SYNTAX, IMPORT, RUNTIME, TIMEOUT, COLLECTION）
+     - `FeedbackMessage`（failure_type, details, strategy_hint, relevant_memory）
+     - `RoundRecord`（round_number, actions, failure_fingerprint, strategy_used, outcome: RoundOutcome）
+     - `RoundOutcome`（enum: PASS, FAIL, NO_TESTS, HITL_DENIED）
+     - `StopReason`（enum: PASS, MAX_ROUNDS, STUCK, HITL_DENIED）
+     - `HITLRequest`（action, status, timestamp, decision）
+     - `HITLStatus`（enum: PENDING, APPROVED, DENIED, TIMEOUT）
+     - `GuardResult`（enum: ALLOW, DENY, PENDING）
+     - `MemoryEntry`（session_id, round, failure_type, test_name, message, strategy_used, outcome）
+   - `tests/conftest.py`: 公共 fixtures（tmp_workspace: 创建临时目标目录并返回路径; mock_config: 返回默认 Config 对象）
+5. **需要先编写的失败测试**: `tests/unit/test_models.py` — 具体断言：
+   - 测试每个 dataclass（Config, Action, TestResult, Failure, FeedbackMessage, RoundRecord, HITLRequest, MemoryEntry）可正确实例化且字段类型正确
+   - 测试每个 enum（FailureType, RoundOutcome, StopReason, HITLStatus, GuardResult）包含 SPEC 中定义的所有值
+   - 测试 Config 默认值正确（max_rounds=10, temperature=0.1 等）
+   - 测试 RoundRecord.outcome 可设为 RoundOutcome.PASS / FAIL / NO_TESTS / HITL_DENIED
 6. **Red 阶段验证命令与预期失败原因**:
    - 命令: `pytest tests/unit/test_models.py -v`
    - 预期失败: `ModuleNotFoundError: No module named 'harness.models'`
@@ -120,7 +139,8 @@ T29 (final acceptance) ← depends on all
 4. **预期实现要点**:
    - `ConfigLoader.load(path: str) -> Config`: 解析 YAML → 校验必填项 → 缺失字段用默认值填充 → 未知字段忽略
    - YAML 解析失败 → 抛 `ConfigError`；必填项缺失 → 抛 `ConfigError`
-   - `harness.yaml.example` 包含 SPEC §3.6.1 所有 13 个配置项
+   - `harness.yaml.example` 包含 SPEC §3.6.1 所有 13 个配置项，使用扁平 snake_case 键（无嵌套），完整示例见 SPEC §3.6.1 `harness.yaml.example` 代码块
+   - `dangerous_command_patterns` 为字符串列表（正则模式）；`enabled_tools` 为字符串列表（工具名）
 5. **需要先编写的失败测试**: `tests/unit/test_config.py` — 测试加载有效 YAML 返回正确 Config；测试缺失字段用默认值；测试无效 YAML 抛异常；测试未知字段被忽略
 6. **Red 阶段验证命令与预期失败原因**:
    - 命令: `pytest tests/unit/test_config.py -v`

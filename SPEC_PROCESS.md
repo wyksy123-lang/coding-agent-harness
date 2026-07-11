@@ -380,3 +380,136 @@
 **结论**：SPEC.md 已获人工批准。用户要求暂不创建 PLAN.md，等待先提交和推送文档。
 
 详细记录见下方"SPEC 批准记录"节。
+
+---
+
+## Gate C — 冷启动验证
+
+### 事实记录
+
+| 项 | 值 |
+|---|---|
+| 冷启动智能体类型 | Aider（与主开发智能体 OpenCode 不同类型） |
+| 模型 | DeepSeek |
+| Session | 全新 session，无先前对话历史 |
+| 提供的上下文 | 仅 SPEC.md 和 PLAN.md，无口头补充 |
+| 选择的 task | T01（项目脚手架 + 共享数据模型）、T02（ConfigLoader） |
+| 遇到不确定时行为 | 暂停并记录问题，未凭猜测继续 |
+
+### 暂停点、问题与误解
+
+| # | 暂停点 | 冷启动 agent 的疑问 | 判定 | 说明 |
+|---|---|---|---|---|
+| CS1 | RoundRecord.outcome 类型 | SPEC §6.1 ER 图标注 `str outcome`，但 §6.2 未列约束；MemoryEntry.outcome 是 enum {resolved, unresolved}，RoundRecord.outcome 类型不明确 | **SPEC 缺陷** | RoundRecord.outcome 应为 enum，与 MemoryEntry.outcome 区分。SPEC 未定义 RoundOutcome 枚举。 |
+| CS2 | harness.yaml.example YAML 结构 | SPEC §3.6.1 列出 13 个配置项但未提供具体 YAML 示例，键名和嵌套结构不明确 | **SPEC 缺陷** | 缺少具体 YAML 示例，新 agent 需猜测键名格式和嵌套方式。 |
+| CS3 | test_models.py 测试断言 | PLAN T01 未描述具体测试断言，新 agent 不确定该测什么 | **PLAN 缺陷** | PLAN 应描述具体断言内容，减少猜测。 |
+| CS4 | 无法运行 pytest | 环境中未安装依赖包，无法验证 Red/Green | **智能体环境限制** | 非 SPEC/PLAN 缺陷，但提示 PLAN 应说明环境前置条件。 |
+| CS5 | TDD 顺序违反 | agent 先写实现再补测试，违反红绿重构 | **PLAN 缺陷** | PLAN 未在每个 task 显式提醒 TDD 顺序（先测试后实现）。 |
+| CS6 | StopReason/GuardResult 枚举值 | SPEC 中定义了这些值，但 PLAN 未引用具体 SPEC 节 | **PLAN 缺陷（轻微）** | PLAN 应在相关 task 中引用 SPEC 节号，方便新 agent 查找。 |
+
+### 修订内容
+
+#### SPEC.md 修订
+
+**修订 CS1 — RoundRecord.outcome 改为 enum**
+
+修订前（§6.1 ER 图）：
+```
+RoundRecord {
+    ...
+    str outcome
+}
+```
+
+修订后：
+```
+RoundRecord {
+    ...
+    RoundOutcome outcome
+}
+
+RoundOutcome {
+    PASS
+    FAIL
+    NO_TESTS
+    HITL_DENIED
+}
+```
+
+修订前（§6.2 字段约束）：无 RoundRecord.outcome 约束行。
+
+修订后：
+```
+| RoundRecord | outcome | enum | ∈ RoundOutcome {PASS, FAIL, NO_TESTS, HITL_DENIED} |
+```
+
+**修订 CS2 — 添加 harness.yaml.example 具体示例**
+
+修订前（§3.6.1）：配置表后无 YAML 示例。
+
+修订后：在配置表后添加完整 `harness.yaml.example` 代码块，包含所有 13 个配置项的扁平 snake_case 键示例，并标注"所有 YAML 键名与配置表名称一致，均为扁平 snake_case，无嵌套"。
+
+#### PLAN.md 修订
+
+**修订 CS3 — T01 添加具体测试断言**
+
+修订前（T01 第 5 项）：
+```
+测试每个 dataclass 可正确实例化、字段类型正确、枚举值完整
+```
+
+修订后：
+```
+- 测试每个 dataclass（Config, Action, TestResult, Failure, FeedbackMessage, RoundRecord, HITLRequest, MemoryEntry）可正确实例化且字段类型正确
+- 测试每个 enum（FailureType, RoundOutcome, StopReason, HITLStatus, GuardResult）包含 SPEC 中定义的所有值
+- 测试 Config 默认值正确（max_rounds=10, temperature=0.1 等）
+- 测试 RoundRecord.outcome 可设为 RoundOutcome.PASS / FAIL / NO_TESTS / HITL_DENIED
+```
+
+**修订 CS5 — 添加 TDD 顺序强制提醒**
+
+修订前：PLAN 顶部仅"严格遵循 TDD：红 → 绿 → 重构。"
+
+修订后：添加"TDD 顺序强制"段落，明确禁止先写实现再补测试，要求 subagent 如先写实现必须删除后从测试重新开始。
+
+**修订 CS6 — T01 models 列表添加所有 enum 值**
+
+修订前：models 列表仅列实体名，未列 enum 值。
+
+修订后：每个 enum 后标注具体值（如 `FailureType`（enum: ASSERTION, SYNTAX, IMPORT, RUNTIME, TIMEOUT, COLLECTION）），并新增 `RoundOutcome`（enum: PASS, FAIL, NO_TESTS, HITL_DENIED）。
+
+**修订 CS2 — T02 添加 YAML 结构引用**
+
+修订前：T02 仅说"包含所有 13 个配置项"。
+
+修订后：添加"使用扁平 snake_case 键（无嵌套），完整示例见 SPEC §3.6.1 `harness.yaml.example` 代码块"和"`dangerous_command_patterns` 为字符串列表（正则模式）；`enabled_tools` 为字符串列表（工具名）"。
+
+### 修订结论
+
+- 6 个暂停点中：SPEC 缺陷 2 个（CS1, CS2）、PLAN 缺陷 3 个（CS3, CS5, CS6）、环境限制 1 个（CS4，非缺陷）
+- 所有缺陷已修复
+- 冷启动验证暴露的核心问题：SPEC 和 PLAN 对新 agent 来说仍有模糊处，尤其是类型定义和具体示例。这证实了"隐性上下文"风险——主开发 agent 和用户在 brainstorming 中沉淀的共识未全部写入文档
+- 冷启动验证是"规约工作中最关键的客观证据"（要求1 §4.5）——本次验证有效发现了 5 个文档缺陷
+
+---
+
+## Gate C 通过 + 修订后人工重新批准
+
+**时间**：2026-07-11
+
+**事件**：用户审阅冷启动报告（`docs/cold-start/COLD_START_REPORT.md`）及修订后的 SPEC.md 和 PLAN.md，确认：
+
+1. **冷启动 Gate C 通过**：Aider（不同类型 agent）在全新 session 中仅凭 SPEC+PLAN 选择了 T01/T02，遇到 6 处不确定时暂停询问，暴露了 5 个文档缺陷。所有缺陷已修订。
+2. **修订后人工重新批准**：用户重新批准当前 SPEC.md（844 行）和 PLAN.md（1016 行）。
+3. **当前可以进入正式实现准备阶段（Gate D）**。
+
+**Gate 状态汇总**：
+
+| Gate | 状态 | 时间 |
+|---|---|---|
+| Gate A — SPEC 批准 | ✅ 通过 | 2026-07-11 |
+| Gate B — PLAN 批准 | ✅ 通过 | 2026-07-11 |
+| Gate C — 冷启动验证 | ✅ 通过 | 2026-07-11 |
+| Gate D — 正式实现 | ⏳ 准备中 | 等待用户指示开始 |
+
+**禁止项**：未开始实现代码，未 commit，未 push。等待用户指示进入 Gate D。

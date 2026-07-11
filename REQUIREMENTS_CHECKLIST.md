@@ -20,8 +20,8 @@
 | R003 | 要求1 §3.6 | 必须如实遵循七步工作流，偏离须在 AGENT_LOG.md 记录并解释 | AGENT_LOG.md | 审查偏离记录 | TODO | — |
 | R004 | 要求1 §4.1 | brainstorming 主动追问"你想做什么"，分块呈现设计供签字确认 | SPEC_PROCESS.md | 审查含分块确认记录 | TODO | — |
 | R005 | 要求1 §4.4 | 至少 3 轮关键迭代的对话节选与处理决策 | SPEC_PROCESS.md | 审查含 ≥3 轮迭代 | TODO | — |
-| R006 | 要求1 §4.5 | 冷启动验证：换一个不同类型 agent，新 session，仅给 SPEC+PLAN，选 1-2 task，遇不确定暂停询问 | SPEC_PROCESS.md 冷启动记录 | 审查第二个 agent 暂停点与 spec 缺陷 | TODO | — |
-| R007 | 要求1 §4.5 | 冷启动记录：暂停点、spec 缺陷、误读、产出差距、SPEC/PLAN 修订 diff | SPEC_PROCESS.md | 审查 before/after diff | TODO | — |
+| R006 | 要求1 §4.5 | 冷启动验证：换一个不同类型 agent，新 session，仅给 SPEC+PLAN，选 1-2 task，遇不确定暂停询问 | SPEC_PROCESS.md 冷启动记录 | 审查第二个 agent 暂停点与 spec 缺陷 | DONE（Aider 冷启动完成，Gate C 通过） | — |
+| R007 | 要求1 §4.5 | 冷启动记录：暂停点、spec 缺陷、误读、产出差距、SPEC/PLAN 修订 diff | SPEC_PROCESS.md | 审查 before/after diff | DONE（6 个暂停点已记录，5 个缺陷已修复，修订后人工重新批准） | — |
 | R008 | 要求1 §4.6 | git worktree 隔离：每个独立功能/大模块一个 worktree，对应一个 PR | git worktree list + PR 链接 | 审查 worktree 与 PR 一一对应 | TODO | — |
 | R009 | 要求1 §4.6 | 每个任务派一个新鲜 subagent 完成 | AGENT_LOG.md | 审查每 task 有独立 subagent 记录 | TODO | — |
 | R010 | 要求1 §4.6 + §3.6 | TDD 强制：红→绿→重构；先写失败测试、得到红色，再写最少代码变绿，再重构。不接受先写实现再补测试 | AGENT_LOG.md + commit 历史 | 审查 commit 顺序：test commit 在 impl commit 之前 | TODO | — |

@@ -56,3 +56,48 @@
 2. 配置项追踪：SPEC 中多处引用配置项但未同步到配置表，导致不一致。未来应在每次引入配置引用时立即更新配置表。
 3. 多步 push 纪律：用户明确要求 AI 不得自行 commit/push，每次需确认。这避免了 AI 在未经审查时推送不成熟内容的风险。
 4. brainstorming 的隐性上下文风险：12 轮迭代沉淀了大量共享上下文，SPEC 的清晰度需冷启动验证（Gate C）才能客观检验。
+
+---
+
+## LOG-002 — Gate C 冷启动验证 + SPEC/PLAN 修订
+
+**时间戳**：2026-07-11
+
+**Task 编号**：Gate C（冷启动验证）
+
+**触发的 Superpowers 技能**：冷启动验证（要求1 §4.5）
+
+**关键 prompt / context 配置**：
+- 冷启动智能体类型：Aider（与主开发智能体 OpenCode 不同类型）
+- 模型：DeepSeek
+- Session：全新，无先前对话历史
+- 提供上下文：仅 SPEC.md 和 PLAN.md
+
+**冷启动 agent 选择的 task**：T01（项目脚手架 + 共享数据模型）、T02（ConfigLoader）
+
+**冷启动 agent 暂停点与发现**：
+
+| # | 发现 | 判定 | 修复 |
+|---|---|---|---|
+| CS1 | RoundRecord.outcome 类型不明确（SPEC 标 str 但未定义约束） | SPEC 缺陷 | 改为 RoundOutcome enum {PASS, FAIL, NO_TESTS, HITL_DENIED} |
+| CS2 | harness.yaml.example 无具体 YAML 示例 | SPEC 缺陷 | 添加完整 YAML 代码块 |
+| CS3 | test_models.py 测试断言未描述 | PLAN 缺陷 | 添加具体断言列表 |
+| CS4 | 无法运行 pytest（环境限制） | 环境限制 | 非 SPEC/PLAN 缺陷 |
+| CS5 | TDD 顺序未显式强制 | PLAN 缺陷 | 添加 TDD 顺序强制段落 |
+| CS6 | enum 值未在 PLAN 中列出 | PLAN 缺陷 | T01 models 列表标注所有 enum 值 |
+
+**修订的文件**：
+- `SPEC.md`：§3.6.1 添加 YAML 示例；§6.1 ER 图 RoundRecord.outcome 改为 RoundOutcome enum + 新增 RoundOutcome 实体；§6.2 添加 RoundRecord.outcome 和 MemoryEntry.outcome 约束
+- `PLAN.md`：顶部添加 TDD 顺序强制段落；T01 添加 RoundOutcome enum + 具体测试断言；T02 添加 YAML 结构引用
+- `SPEC_PROCESS.md`：添加 Gate C 冷启动验证完整记录（事实/暂停点/判定/修订前后 diff）
+- `REQUIREMENTS_CHECKLIST.md`：更新 R006/R007 状态
+
+**人工干预**：用户在外部终端用 Aider 执行冷启动验证，返回报告后指示主 agent 记录和修订。
+
+**Commit hash**：尚未 commit（用户要求修订后等待重新批准）。
+
+**教训**：
+1. 冷启动验证有效：5 个文档缺陷被新 agent 发现，证实了"隐性上下文"风险——主开发 agent 和用户在 brainstorming 中沉淀的共识未全部写入文档。
+2. 类型定义需完整：SPEC 中 RoundRecord.outcome 标为 str 但未定义约束，而 MemoryEntry.outcome 有明确 enum 约束。同类字段应有一致的类型严格度。
+3. 具体示例不可省略：YAML 配置示例、测试断言描述等"看似显然"的内容对新 agent 并不显然。文档应假设读者无先验上下文。
+4. TDD 顺序需显式强制：即使 PLAN 中有"Red 阶段验证命令"，新 agent 仍可能先写实现再补测试。需在每个 task 显式提醒顺序。
