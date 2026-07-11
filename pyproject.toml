@@ -1,0 +1,17 @@
+[project]
+name = "coding-agent-harness"
+version = "0.1.0"
+description = "TDD-focused Coding Agent Harness"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx",
+    "pyyaml",
+    "keyring",
+    "fastapi",
+    "uvicorn",
+    "websockets",
+    "pytest",
+    "pytest-json-report",
+    "ruff",
+    "mypy",
+]

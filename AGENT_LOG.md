@@ -101,3 +101,91 @@
 2. 类型定义需完整：SPEC 中 RoundRecord.outcome 标为 str 但未定义约束，而 MemoryEntry.outcome 有明确 enum 约束。同类字段应有一致的类型严格度。
 3. 具体示例不可省略：YAML 配置示例、测试断言描述等"看似显然"的内容对新 agent 并不显然。文档应假设读者无先验上下文。
 4. TDD 顺序需显式强制：即使 PLAN 中有"Red 阶段验证命令"，新 agent 仍可能先写实现再补测试。需在每个 task 显式提醒顺序。
+
+---
+
+## LOG-003 — TASK-01 Red 阶段
+
+**时间戳**：2026-07-11
+
+**Task 编号**：TASK-01（项目脚手架 + 共享数据模型）
+
+**触发的 Superpowers 技能**：
+- `using-superpowers`
+- `using-git-worktrees`
+- `subagent-driven-development`
+- `test-driven-development`
+
+**subagent 信息**：
+- 类型：`general`
+- Task ID：`ses_0ae3c32e3ffeULLA57TRIYiV95`
+- 关键 prompt：仅编写 `tests/unit/test_models.py` 失败测试，不写任何实现代码
+
+**subagent 执行内容**：
+1. 创建 `tests/__init__.py`（空文件）
+2. 创建 `tests/unit/__init__.py`（空文件）
+3. 编写 `tests/unit/test_models.py`（499 行，38 个测试，8 个测试类）
+   - TestEnums（6 个测试）：验证 FailureType/RoundOutcome/StopReason/HITLStatus/GuardResult 的值和枚举特性
+   - TestConfig（6 个测试）：验证默认值、自定义值、字段类型、dataclass 特性
+   - TestAction（4 个测试）：验证实例化、raw_tool_call、字段类型、dataclass 特性
+   - TestTestResult（4 个测试）：验证实例化、含 failures、字段类型、dataclass 特性
+   - TestFailure（4 个测试）：验证实例化、默认值、FailureType 枚举兼容、dataclass 特性
+   - TestFeedbackMessage（4 个测试）：验证实例化、含 memory、字段类型、dataclass 特性
+   - TestRoundRecord（7 个测试）：验证实例化、PASS/FAIL/NO_TESTS/HITL_DENIED 四种 outcome、字段类型、dataclass 特性
+   - TestHITLRequest（6 个测试）：验证 PENDING/APPROVED/DENIED/TIMEOUT 四种状态、字段类型、dataclass 特性
+   - TestMemoryEntry（4 个测试）：验证实例化、resolved/unresolved、字段类型、dataclass 特性
+
+**Red 阶段验证**：
+- 命令：`pytest tests/unit/test_models.py -v`
+- 退出状态码：`2`（collection error）
+- 关键失败原因：
+  ```
+  ModuleNotFoundError: No module named 'harness.models'
+  ```
+- 结果：0 collected, 1 error
+- 失败原因确认：`harness/models.py` 尚未创建，测试因导入目标模块不存在而失败。测试文件本身语法正确，导入语句合法，断言全面。**不是语法错误、环境错误或测试本身错误。**
+
+**人工干预**：无（Red 阶段自动执行，等待人工检查）
+
+**Commit hash**：尚未 commit（Red 阶段，禁止 commit）
+
+**教训**：—（待 Green 阶段完成后补充）
+
+---
+
+## LOG-004 — TASK-01 Green 阶段
+
+**时间戳**：2026-07-11
+
+**Task 编号**：TASK-01（项目脚手架 + 共享数据模型）
+
+**触发的 Superpowers 技能**：
+- `subagent-driven-development`
+- `test-driven-development`
+
+**subagent 信息**：
+- 类型：`general`
+- Task ID：`ses_0ae385d3effecUsOak93DA0XVJ`
+- 关键 prompt：仅实现让 `tests/unit/test_models.py` 通过的最少代码
+
+**subagent 执行内容**：
+1. 创建 `harness/__init__.py`（空文件）
+2. 创建 `harness/models.py`（119 行）：
+   - 5 个 Enum：FailureType(str), RoundOutcome, StopReason, HITLStatus, GuardResult
+   - 8 个 Dataclass：Config(13 fields), Action, TestResult, Failure, FeedbackMessage, RoundRecord, HITLRequest, MemoryEntry
+3. 创建 `pyproject.toml`（项目元数据 + 10 个依赖）
+4. 创建 `Makefile`（test, test-unit, lint, typecheck targets）
+5. 创建 `tests/conftest.py`（tmp_workspace, mock_config fixtures）
+
+**Green 阶段验证**：
+- 命令：`pytest tests/unit/test_models.py -v`
+- 退出状态码：`0`
+- 结果：**45 passed, 1 warning** in 0.02s
+- 从 Red 到 Green：`ModuleNotFoundError` → 全部 45 个测试通过
+- 回归检查：`pytest tests/ -v` 同样 45 passed，无回归
+
+**人工干预**：无
+
+**Commit hash**：尚未 commit（Green 阶段，等待人工检查）
+
+**教训**：—
