@@ -245,7 +245,7 @@ T29 (final acceptance) ← depends on all
 11. **对应 worktree 和 PR 范围**: `feature/llm` / PR3
 12. **完成状态及 commit hash 记录位置**: 本文件 T05 行；AGENT_LOG.md
 
-**状态**: ⬜ TODO | **Commit**: —
+**状态**: ✅ DONE | **Commit**: 9bd284c (Red), 97a8632 (Green), 8b46398 (Refactor)
 
 ---
 
