@@ -9,6 +9,15 @@ import pytest
 from harness.models import Action, Config
 from harness.tools.base import Tool, ToolRegistry, ToolResult
 
+_TEST_TOOL_NAMES = ["echo", "fail_tool", "noop", "custom", "raiser"]
+
+
+def _test_config(**kwargs: Any) -> Config:
+    """Create a Config with all test tools enabled in the whitelist."""
+    defaults: dict[str, Any] = {"enabled_tools": list(_TEST_TOOL_NAMES)}
+    defaults.update(kwargs)
+    return Config(**defaults)
+
 
 class _EchoTool(Tool):
     @property
@@ -91,6 +100,21 @@ class _CustomNameTool(Tool):
             success=True,
             output={"received": args.get("input", "")},
         )
+
+
+class _RaisingTool(Tool):
+    """A tool whose execute() raises an unexpected exception."""
+
+    @property
+    def name(self) -> str:
+        return "raiser"
+
+    @property
+    def schema(self) -> dict[str, Any]:
+        return {"type": "object", "properties": {}, "required": []}
+
+    def execute(self, args: dict[str, Any]) -> ToolResult:
+        raise RuntimeError("unexpected internal error")
 
 
 class TestToolResult:
@@ -281,7 +305,9 @@ class TestToolRegistryRegistration:
         registry = ToolRegistry(Config())
         tool = _EchoTool()
         registry.register(tool)
-        assert registry.is_enabled("echo") or True
+        schemas = registry.get_schemas()
+        assert len(schemas) == 1
+        assert schemas[0] == tool.schema
 
     def test_register_multiple_tools(self):
         registry = ToolRegistry(Config())
@@ -292,7 +318,7 @@ class TestToolRegistryRegistration:
         assert len(schemas) == 3
 
     def test_register_same_name_overwrites(self):
-        registry = ToolRegistry(Config())
+        registry = ToolRegistry(_test_config())
         first = _EchoTool()
         second = _CustomNameTool("echo")
         registry.register(first)
@@ -302,7 +328,7 @@ class TestToolRegistryRegistration:
         assert result.output == {"received": "overwritten"}
 
     def test_register_allows_dispatch_by_name(self):
-        registry = ToolRegistry(Config())
+        registry = ToolRegistry(_test_config())
         registry.register(_EchoTool())
         action = Action(tool_name="echo", args={"message": "hi"})
         result = registry.dispatch(action)
@@ -317,7 +343,7 @@ class TestToolRegistryRegistration:
 
 class TestToolRegistryDispatch:
     def test_dispatch_calls_execute_with_action_args(self):
-        registry = ToolRegistry(Config())
+        registry = ToolRegistry(_test_config())
         registry.register(_EchoTool())
         action = Action(
             tool_name="echo",
@@ -329,20 +355,20 @@ class TestToolRegistryDispatch:
         assert result.output == {"echo": "dispatched"}
 
     def test_dispatch_returns_tool_result(self):
-        registry = ToolRegistry(Config())
+        registry = ToolRegistry(_test_config())
         registry.register(_EchoTool())
         action = Action(tool_name="echo", args={"message": "test"})
         result = registry.dispatch(action)
         assert isinstance(result, ToolResult)
 
     def test_dispatch_unregistered_tool_raises(self):
-        registry = ToolRegistry(Config())
+        registry = ToolRegistry(_test_config())
         action = Action(tool_name="nonexistent", args={})
-        with pytest.raises((KeyError, ValueError)):
+        with pytest.raises(KeyError):
             registry.dispatch(action)
 
     def test_dispatch_with_empty_args(self):
-        registry = ToolRegistry(Config())
+        registry = ToolRegistry(_test_config())
         registry.register(_NoOpTool())
         action = Action(tool_name="noop", args={})
         result = registry.dispatch(action)
@@ -350,7 +376,7 @@ class TestToolRegistryDispatch:
         assert result.output == {}
 
     def test_dispatch_passes_args_correctly(self):
-        registry = ToolRegistry(Config())
+        registry = ToolRegistry(_test_config())
         registry.register(_CustomNameTool("custom"))
         action = Action(
             tool_name="custom",
@@ -360,7 +386,7 @@ class TestToolRegistryDispatch:
         assert result.output == {"received": "passed_value"}
 
     def test_dispatch_failing_tool_returns_failed_result(self):
-        registry = ToolRegistry(Config())
+        registry = ToolRegistry(_test_config())
         registry.register(_FailingTool())
         action = Action(tool_name="fail_tool", args={})
         result = registry.dispatch(action)
@@ -368,7 +394,7 @@ class TestToolRegistryDispatch:
         assert result.error == "intentional failure"
 
     def test_dispatch_preserves_action_raw_tool_call(self):
-        registry = ToolRegistry(Config())
+        registry = ToolRegistry(_test_config())
         registry.register(_EchoTool())
         raw = {"id": "call_abc", "type": "function"}
         action = Action(
@@ -416,7 +442,7 @@ class TestToolRegistryWhitelist:
         registry = ToolRegistry(config)
         registry.register(_EchoTool())
         action = Action(tool_name="echo", args={"message": "hi"})
-        with pytest.raises((ValueError, RuntimeError, PermissionError)):
+        with pytest.raises(PermissionError):
             registry.dispatch(action)
 
     def test_dispatch_enabled_tool_succeeds(self):
@@ -434,7 +460,7 @@ class TestToolRegistryWhitelist:
         registry.register(_EchoTool())
         assert registry.is_enabled("echo") is False
         action = Action(tool_name="echo", args={})
-        with pytest.raises((ValueError, RuntimeError, PermissionError)):
+        with pytest.raises(PermissionError):
             registry.dispatch(action)
 
     def test_is_enabled_with_empty_enabled_tools(self):
@@ -442,6 +468,14 @@ class TestToolRegistryWhitelist:
         registry = ToolRegistry(config)
         assert registry.is_enabled("echo") is False
         assert registry.is_enabled("write_file") is False
+
+    def test_dispatch_default_config_rejects_non_whitelisted_tool(self):
+        """SPEC §3.6.1: enabled_tools is the whitelist for dispatch()."""
+        registry = ToolRegistry(Config())
+        registry.register(_EchoTool())
+        action = Action(tool_name="echo", args={})
+        with pytest.raises(PermissionError):
+            registry.dispatch(action)
 
 
 class TestToolRegistryGetSchemas:
@@ -507,7 +541,7 @@ class TestToolRegistryEdgeCases:
     def test_empty_registry_dispatch_raises(self):
         registry = ToolRegistry(Config())
         action = Action(tool_name="anything", args={})
-        with pytest.raises((KeyError, ValueError)):
+        with pytest.raises(KeyError):
             registry.dispatch(action)
 
     def test_empty_registry_get_schemas(self):
@@ -519,7 +553,7 @@ class TestToolRegistryEdgeCases:
         assert registry.is_enabled("anything") is False
 
     def test_dispatch_with_empty_args_to_echo(self):
-        registry = ToolRegistry(Config())
+        registry = ToolRegistry(_test_config())
         registry.register(_EchoTool())
         action = Action(tool_name="echo", args={})
         result = registry.dispatch(action)
@@ -532,7 +566,7 @@ class TestToolRegistryEdgeCases:
         assert result.success is True
 
     def test_multiple_tools_registered_dispatch_each(self):
-        registry = ToolRegistry(Config())
+        registry = ToolRegistry(_test_config())
         registry.register(_EchoTool())
         registry.register(_FailingTool())
         registry.register(_NoOpTool())
@@ -566,7 +600,7 @@ class TestToolRegistryEdgeCases:
         assert registry.is_enabled("fail_tool") is False
 
     def test_dispatch_action_with_raw_tool_call(self):
-        registry = ToolRegistry(Config())
+        registry = ToolRegistry(_test_config())
         registry.register(_EchoTool())
         raw = {"id": "call_xyz", "type": "function", "name": "echo"}
         action = Action(
@@ -591,3 +625,11 @@ class TestToolRegistryEdgeCases:
         assert len(registry.get_schemas()) == 1
         registry.register(_NoOpTool())
         assert len(registry.get_schemas()) == 2
+
+    def test_dispatch_propagates_execute_exception(self):
+        """dispatch() does not catch exceptions from tool.execute()."""
+        registry = ToolRegistry(_test_config())
+        registry.register(_RaisingTool())
+        action = Action(tool_name="raiser", args={})
+        with pytest.raises(RuntimeError, match="unexpected internal error"):
+            registry.dispatch(action)

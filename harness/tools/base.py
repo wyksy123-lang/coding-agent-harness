@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
 
-from harness.models import Action, Config, _DEFAULT_ENABLED_TOOLS
+from harness.models import Action, Config
 
 
 @dataclass
@@ -18,7 +18,7 @@ class ToolResult:
     """
 
     success: bool
-    output: dict
+    output: dict[str, Any]
     error: str | None = None
 
 
@@ -87,8 +87,7 @@ class ToolRegistry:
     def dispatch(self, action: Action) -> ToolResult:
         """Dispatch an action to the registered tool.
 
-        When the whitelist has been customized from the default
-        configuration, only tools present in the whitelist may be
+        Only tools present in the ``enabled_tools`` whitelist may be
         dispatched.
 
         Args:
@@ -99,14 +98,11 @@ class ToolRegistry:
 
         Raises:
             KeyError: If the tool is not registered.
-            PermissionError: If the tool is not enabled under a custom
-                whitelist.
+            PermissionError: If the tool is registered but not enabled.
         """
         if action.tool_name not in self._tools:
             raise KeyError(action.tool_name)
-        if self._config.enabled_tools != list(_DEFAULT_ENABLED_TOOLS) and not self.is_enabled(
-            action.tool_name
-        ):
+        if not self.is_enabled(action.tool_name):
             raise PermissionError(f"Tool '{action.tool_name}' is not enabled")
         return self._tools[action.tool_name].execute(action.args)
 
