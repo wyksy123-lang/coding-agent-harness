@@ -95,3 +95,17 @@ REQUIREMENTS_CHECKLIST.md 和 AGENT_LOG.md。
 - Critical issue 无法修复
 - 需要真实凭据
 - 需要危险或破坏性命令
+
+## One-task-per-run hard gate
+
+This section has the highest priority.
+
+- One invocation executes exactly one top-level PLAN task.
+- Create exactly one task branch and one worktree.
+- Never select or begin a second task in the same invocation.
+- Never create a dependent task from an unmerged task branch.
+- After completing tests, reviews, local commits, and documentation for the
+  selected task, output push and PR instructions and stop.
+- The next task starts only after the human pushes and merges the current
+  PR, synchronizes main, and invokes `/ai4se-next` again.
+- Every new task worktree must be created from the latest main.

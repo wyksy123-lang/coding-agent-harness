@@ -198,3 +198,32 @@ refactor(<TASK-ID>): complete reviews and verification
 12. 建议的 PR 描述。
 
 完成后停止，等待人工检查和 push。
+
+## 8. 单次运行硬停止规则
+
+本节优先级最高，不得被其他规则覆盖。
+
+1. 每次执行 `/ai4se-next` 只能选择并完成一个顶层 TASK。
+2. 本次启动后选中的 TASK 编号不得改变。
+3. 本次运行最多创建一个 task 分支和一个 worktree。
+4. 完成当前 TASK 的 Red、Green、Refactor、两阶段评审、
+   最终验证、本地提交和过程文档更新后，必须立即停止。
+5. 停止前必须输出：
+   - 分支名；
+   - worktree 路径；
+   - commit 列表；
+   - 测试结果；
+   - 建议的 push 命令；
+   - 建议的 PR 标题和描述。
+6. 禁止在同一次运行中重新扫描 PLAN 并选择下一个 TASK。
+7. 禁止创建第二个 TASK 的分支或 worktree。
+8. 下一个 TASK 必须等待当前 TASK 经人工检查、push、PR 合并，
+   且 main 完成同步后，由用户重新运行 `/ai4se-next`。
+9. 每个新 TASK 的分支和 worktree 必须从最新 main 创建。
+10. 禁止从尚未合并的 task 分支创建后续 TASK。
+
+当前 TASK 完成后的唯一流程是：
+
+输出总结 → 停止 → 等待人工 push 和 PR。
+
+不得继续执行下一个 TASK。
