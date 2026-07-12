@@ -1008,3 +1008,192 @@
 2. Code Quality Review 发现的 Major 问题（CQ-1：非重试 HTTP 错误产生 KeyError）是一个典型的"happy path 测试驱动开发可能遗漏的错误路径"——40 个测试全部通过，但 401/403 等认证错误会产生混淆的 KeyError 而非有意义的 HTTPStatusError。在 review 阶段补充错误路径测试是必要的。
 3. `assert` 语句在 `python -O` 下会被剥离——生产代码中不应依赖 assert 做运行时检查，应使用显式条件判断和异常抛出。
 4. httpx.Client 持有连接池资源——提供 `close()` 方法和上下文管理器协议是资源管理的最佳实践，避免连接泄漏。
+
+---
+
+## LOG-018 — TASK-06 Red 阶段
+
+**时间戳**：2026-07-12
+
+**Task 编号**：TASK-06（工具基类 + ToolRegistry）
+
+**触发的 Superpowers 技能**：
+- `subagent-driven-development`
+- `test-driven-development`
+
+**subagent 信息**：
+- 类型：`general`
+- Task ID：`ses_0aa3edc19ffewmTCKyEO5GW7Wt`
+- 关键 prompt：仅编写 `tests/unit/test_tool_registry.py` 失败测试，不写任何实现代码
+
+**subagent 执行内容**：
+1. 编写 `tests/unit/test_tool_registry.py`（593 行，67 个测试，7 个测试类）
+   - TestToolResult（16 个测试）：验证 dataclass 实例化、类型、默认值、相等性、repr
+   - TestToolABC（13 个测试）：验证抽象类不可实例化、子类必须实现 name/schema/execute、name 和 schema 可访问
+   - TestToolRegistryRegistration（5 个测试）：验证单/多/重复注册、按名分发
+   - TestToolRegistryDispatch（7 个测试）：验证 execute 分发、未注册抛异常、空参数、失败工具
+   - TestToolRegistryWhitelist（9 个测试）：验证 is_enabled true/false、默认配置、禁用工具分发抛异常
+   - TestToolRegistryGetSchemas（7 个测试）：验证空/单/多 schema、schema 匹配、重注册反映最新
+   - TestToolRegistryEdgeCases（10 个测试）：验证空注册表、None error、多工具分发、raw_tool_call
+   - 4 个测试工具子类：_EchoTool、_FailingTool、_NoOpTool、_CustomNameTool
+
+**Red 阶段验证**：
+- 命令：`pytest tests/unit/test_tool_registry.py -v`
+- 退出状态码：`2`（collection error）
+- 关键失败原因：
+  ```
+  ModuleNotFoundError: No module named 'harness.tools'
+  ```
+- 结果：0 collected, 1 error
+- 失败原因确认：`harness/tools/` 包尚未创建，测试因导入目标模块不存在而失败。测试文件本身语法正确，导入语句合法，断言全面。**不是语法错误、环境错误或测试本身错误。**
+
+**人工干预**：无
+
+**Commit hash**：`cdbfdd6` (test(T06): add failing tests)
+
+**教训**：—
+
+---
+
+## LOG-019 — TASK-06 Green 阶段
+
+**时间戳**：2026-07-12
+
+**Task 编号**：TASK-06（工具基类 + ToolRegistry）
+
+**触发的 Superpowers 技能**：
+- `subagent-driven-development`
+- `test-driven-development`
+
+**subagent 信息**：
+- 类型：`general`
+- Task ID：`ses_0aa3929d6ffeOgkNaI9XAdxPKs`
+- 关键 prompt：仅实现让 `tests/unit/test_tool_registry.py` 通过的最少代码
+
+**subagent 执行内容**：
+1. 创建 `harness/tools/__init__.py`（空文件，包标记）
+2. 创建 `harness/tools/base.py`（119 行）：
+   - `ToolResult` dataclass: `success: bool`, `output: dict`, `error: str | None = None`
+   - `Tool` ABC: 抽象属性 `name` 和 `schema`（via `@property @abstractmethod`），抽象方法 `execute`
+   - `ToolRegistry`: `register(tool)`, `dispatch(action)`, `is_enabled(tool_name)`, `get_schemas()`
+   - `dispatch` 使用 hacky 的 `_DEFAULT_ENABLED_TOOLS` 比较来决定是否强制白名单（后续 Refactor 修复）
+
+**Green 阶段验证**：
+- 命令：`pytest tests/unit/test_tool_registry.py -v`
+- 退出状态码：`0`
+- 结果：**67 passed** in 0.04s
+- 从 Red 到 Green：`ModuleNotFoundError` → 全部 67 个测试通过
+- 回归检查：`pytest tests/ -v` 同样 266 passed，无回归
+
+**人工干预**：无
+
+**Commit hash**：`c9431a2` (feat(T06): implement minimal green solution)
+
+**教训**：—
+
+---
+
+## LOG-020 — TASK-06 Refactor + 两阶段评审 + 最终验证
+
+**时间戳**：2026-07-12
+
+**Task 编号**：TASK-06（工具基类 + ToolRegistry）
+
+**触发的 Superpowers 技能**：
+- `test-driven-development`（重构阶段）
+- `subagent-driven-development`（Code Quality Review subagent）
+
+### Refactor 阶段
+
+**执行内容**：
+1. **Critical SPEC 修复**：`dispatch()` 方法使用 hacky 的 `_DEFAULT_ENABLED_TOOLS` 比较来决定是否强制白名单——改为始终检查 `is_enabled()`，符合 SPEC §3.6.1 "enabled_tools → ToolRegistry.dispatch() 白名单"
+2. 修复测试：将使用默认 `Config()` 分发测试工具的测试改为使用 `_test_config()`（包含测试工具名的白名单）
+3. 添加 SPEC 合规测试：`test_dispatch_default_config_rejects_non_whitelisted_tool`——验证默认 Config 下分发非白名单工具抛 PermissionError
+4. 修复 mypy 类型标注：`output: dict` → `output: dict[str, Any]`
+5. 修复 Code Quality Review 发现的 1 个 Major + 4 个 Minor 问题：
+   - CQ-1（Major）：`test_register_single_tool` 中 `assert registry.is_enabled("echo") or True` 是恒真断言 → 改为验证 `get_schemas()` 返回正确结果
+   - CQ-2（Minor）：4 个测试使用过宽的异常匹配 → 收紧为精确的 `KeyError` / `PermissionError`
+   - CQ-3（Minor）：`__init__.py` 为空 → 添加 re-export `Tool`, `ToolResult`, `ToolRegistry`
+   - CQ-4（Minor）：缺少 `execute()` 抛异常时的 dispatch 行为测试 → 添加 `_RaisingTool` 和 `test_dispatch_propagates_execute_exception`
+
+**验证**：`pytest tests/unit/test_tool_registry.py -v` → 69 passed（从 67 增至 69）
+
+### 第一阶段：Specification Compliance Review
+
+**对照**：SPEC.md §3.2（工具集）、§3.6.1（enabled_tools → dispatch 白名单）、§5.1（组件图）、§6.1（Action dataclass）、§9.6（机制编码）、§10.2（AC12）、PLAN.md T06
+
+**发现 Critical 问题及修复**：
+
+| # | 问题 | 严重度 | 修复 |
+|---|---|---|---|
+| SC1 | `dispatch()` 未始终强制 `enabled_tools` 白名单——使用 hacky 的 `_DEFAULT_ENABLED_TOOLS` 比较 | Critical | 改为始终检查 `is_enabled()`，移除 `_DEFAULT_ENABLED_TOOLS` 依赖 |
+
+**检查结果**：
+
+| 检查项 | 结果 |
+|---|---|
+| Tool ABC: name/schema/execute | ✅ 符合 |
+| ToolResult: success/output/error | ✅ 符合 |
+| ToolRegistry: register/dispatch/get_schemas/is_enabled | ✅ 符合 |
+| is_enabled 受 Config.enabled_tools 控制 | ✅ 符合 |
+| dispatch 始终强制 enabled_tools 白名单 | ✅ 符合（修复后） |
+| 无越界实现（未实现 T07/T08） | ✅ 符合 |
+| 无真实网络/LLM 依赖 | ✅ 符合 |
+
+**越界实现检查**：无越界（未实现 T07 文件操作工具或 T08 Shell 工具）
+
+### 第二阶段：Code Quality Review
+
+**subagent 信息**：
+- 类型：`general`（reviewer 角色）
+- Task ID：`ses_0aa29bb4fffeYQPuwhoiZd9vUY`
+- 关键 prompt：审查 T06 代码质量，检查 8 项标准
+
+**审查结果摘要**：
+
+| # | 标准 | 判定 | 严重度 |
+|---|---|---|---|
+| 1 | 职责划分 | PASS | — |
+| 2 | 可读性 | PASS | — |
+| 3 | 接口和类型 | PASS | — |
+| 4 | 错误处理 | WARN | Minor（KeyError 语义、execute 异常未包装） |
+| 5 | 安全边界 | PASS | — |
+| 6 | 测试质量 | WARN | Major（恒真断言 → 已修复）+ Minor（过宽异常匹配 → 已修复） |
+| 7 | 可维护性 | PASS | Minor（__init__.py 空 → 已修复、register 静默覆盖） |
+| 8 | 无真实网络/LLM 依赖 | PASS | — |
+
+**修复的问题**：
+
+| # | 问题 | 严重度 | 修复 |
+|---|---|---|---|
+| CQ-1 | `test_register_single_tool` 恒真断言 `assert ... or True` | Major | 改为验证 `get_schemas()` 返回正确结果 |
+| CQ-2 | 4 个测试过宽异常匹配 `(KeyError, ValueError)` 等 | Minor | 收紧为精确的 `KeyError` / `PermissionError` |
+| CQ-3 | `__init__.py` 为空，未 re-export | Minor | 添加 `from harness.tools.base import Tool, ToolRegistry, ToolResult` |
+| CQ-4 | 缺少 `execute()` 抛异常时 dispatch 行为测试 | Minor | 添加 `_RaisingTool` + `test_dispatch_propagates_execute_exception` |
+
+**未修复（合理保留）**：
+- `KeyError` 用于未注册工具：语义上可辩护（dict 查找隐喻），SPEC 未指定异常类型
+- `dispatch` 不包装 `execute()` 异常：约定为工具返回 `ToolResult(success=False)`，T07/T08 遵循此约定
+- `register()` 静默覆盖同名工具：已文档化，大型代码库可考虑警告日志
+- `get_schemas()` 返回所有注册工具的 schema（不按白名单过滤）：T18 可按需过滤
+
+### 最终验证
+
+| 检查项 | 命令 | 结果 |
+|---|---|---|
+| 目标测试 | `pytest tests/unit/test_tool_registry.py -v` | **69 passed** in 0.07s |
+| 完整测试套件 | `pytest tests/ -v` | **268 passed** in 0.34s |
+| Lint | `ruff check harness/ tests/` | All checks passed! |
+| 类型检查 | `mypy harness/` | Success: no issues found in 10 source files |
+| 凭据泄露检查 | `grep -rni "api_key\|secret\|password\|token\|sk-" harness/tools/ tests/unit/test_tool_registry.py` | 无匹配（源码无凭据） |
+| Git 历史扫描 | `git log --all -p \| grep -i "api_key\|secret\|password"` | 仅 T05 文档引用（参数名和概念性提及），无真实凭据 |
+
+**Commit hash**：`5636470` (refactor(T06): complete reviews and verification)
+
+**人工干预**：无
+
+**教训**：
+1. SPEC 合规问题可能在 Green 阶段被掩盖——subagent 为使测试通过，使用了 hacky 的 `_DEFAULT_ENABLED_TOOLS` 比较来绕过白名单强制。这导致测试全部通过但行为不符合 SPEC §3.6.1。Specification Compliance Review 是捕获此类问题的关键环节。
+2. 恒真断言（`assert ... or True`）是测试质量的典型陷阱——Code Quality Review 发现 `test_register_single_tool` 中的恒真断言，该测试看似通过但实际不验证任何内容。Review 阶段应检查每个 assert 是否真正测试了预期行为。
+3. 过宽的异常匹配（`pytest.raises((KeyError, ValueError))`）会掩盖回归——如果实现改为抛出错误的异常类型，测试仍会通过。应始终匹配精确的异常类型。
+4. `__init__.py` re-export 是 Python 包的最佳实践——为下游 task（T07/T08/T18）提供更简洁的导入路径 `from harness.tools import Tool` 而非 `from harness.tools.base import Tool`。
