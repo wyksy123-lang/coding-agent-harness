@@ -424,7 +424,7 @@ class TestDeepSeekClientRetryLogic:
 
         transport = MockTransport(handler)
         client = _make_client(transport=transport, retry_count=3)
-        with pytest.raises(Exception):
+        with pytest.raises(httpx.ConnectError):
             client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
         assert call_count == 4
 
@@ -438,7 +438,7 @@ class TestDeepSeekClientRetryLogic:
 
         transport = MockTransport(handler)
         client = _make_client(transport=transport, retry_count=2)
-        with pytest.raises(Exception):
+        with pytest.raises(httpx.ReadTimeout):
             client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
         assert call_count == 3
 
@@ -452,7 +452,7 @@ class TestDeepSeekClientRetryLogic:
 
         transport = MockTransport(handler)
         client = _make_client(transport=transport, retry_count=2)
-        with pytest.raises(Exception):
+        with pytest.raises(httpx.HTTPStatusError):
             client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
         assert call_count == 3
 
@@ -466,7 +466,7 @@ class TestDeepSeekClientRetryLogic:
 
         transport = MockTransport(handler)
         client = _make_client(transport=transport, retry_count=3)
-        with pytest.raises(Exception):
+        with pytest.raises(httpx.HTTPStatusError):
             client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
         assert call_count == 4
 
@@ -480,7 +480,7 @@ class TestDeepSeekClientRetryLogic:
 
         transport = MockTransport(handler)
         client = _make_client(transport=transport, retry_count=0)
-        with pytest.raises(Exception):
+        with pytest.raises(httpx.ConnectError):
             client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
         assert call_count == 1
 
@@ -494,7 +494,7 @@ class TestDeepSeekClientRetryLogic:
 
         transport = MockTransport(handler)
         client = _make_client(transport=transport, retry_count=1)
-        with pytest.raises(Exception):
+        with pytest.raises(httpx.ConnectError):
             client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
         assert call_count == 2
 
@@ -625,3 +625,86 @@ class TestDeepSeekClientNoHardcodedApiKey:
         )
         source = source_path.read_text()
         assert "sk-" not in source
+
+
+class TestDeepSeekClientNonRetriableErrors:
+    def test_http_401_raises_http_status_error(self):
+        transport = MockTransport(
+            lambda req: httpx.Response(401, json={"error": {"message": "unauthorized"}})
+        )
+        client = _make_client(transport=transport, retry_count=3)
+        with pytest.raises(httpx.HTTPStatusError):
+            client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
+
+    def test_http_403_raises_http_status_error(self):
+        transport = MockTransport(
+            lambda req: httpx.Response(403, json={"error": {"message": "forbidden"}})
+        )
+        client = _make_client(transport=transport, retry_count=3)
+        with pytest.raises(httpx.HTTPStatusError):
+            client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
+
+    def test_http_400_raises_http_status_error(self):
+        transport = MockTransport(
+            lambda req: httpx.Response(400, json={"error": {"message": "bad request"}})
+        )
+        client = _make_client(transport=transport, retry_count=3)
+        with pytest.raises(httpx.HTTPStatusError):
+            client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
+
+    def test_non_retriable_error_does_not_retry(self):
+        call_count = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            return httpx.Response(401, json={"error": {"message": "unauthorized"}})
+
+        transport = MockTransport(handler)
+        client = _make_client(transport=transport, retry_count=3)
+        with pytest.raises(httpx.HTTPStatusError):
+            client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
+        assert call_count == 1
+
+
+class TestDeepSeekClientResourceCleanup:
+    def test_close_method_exists(self):
+        client = _make_client()
+        assert hasattr(client, "close")
+        assert callable(client.close)
+
+    def test_close_does_not_raise(self):
+        transport = MockTransport(
+            lambda req: httpx.Response(200, json=_make_api_response())
+        )
+        client = _make_client(transport=transport)
+        client.close()
+
+    def test_context_manager_protocol(self):
+        transport = MockTransport(
+            lambda req: httpx.Response(200, json=_make_api_response())
+        )
+        with _make_client(transport=transport) as client:
+            result = client.chat(
+                messages=[{"role": "user", "content": "hi"}], tools=[]
+            )
+            assert isinstance(result, LLMResponse)
+
+    def test_context_manager_closes_client(self):
+        transport = MockTransport(
+            lambda req: httpx.Response(200, json=_make_api_response())
+        )
+        client = _make_client(transport=transport)
+        client.__enter__()
+        client.__exit__(None, None, None)
+        assert client._client.is_closed
+
+
+class TestDeepSeekClientNegativeRetryCount:
+    def test_negative_retry_count_raises_runtime_error(self):
+        transport = MockTransport(
+            lambda req: httpx.Response(200, json=_make_api_response())
+        )
+        client = _make_client(transport=transport, retry_count=-1)
+        with pytest.raises(RuntimeError):
+            client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])

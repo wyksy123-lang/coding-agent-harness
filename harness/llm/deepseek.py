@@ -7,6 +7,9 @@ import httpx
 
 from harness.llm.base import LLMClient, LLMResponse, ToolCall
 
+_API_URL = "https://api.deepseek.com/chat/completions"
+_RETRY_STATUS_CODES = frozenset({500, 429})
+
 
 class DeepSeekClient(LLMClient):
     """LLM client that communicates with the DeepSeek chat completions API."""
@@ -40,6 +43,16 @@ class DeepSeekClient(LLMClient):
         else:
             self._client = httpx.Client(transport=transport, timeout=timeout)
 
+    def close(self) -> None:
+        """Close the underlying httpx client and release connections."""
+        self._client.close()
+
+    def __enter__(self) -> DeepSeekClient:
+        return self
+
+    def __exit__(self, *args: Any) -> None:
+        self._client.close()
+
     def chat(
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
     ) -> LLMResponse:
@@ -55,9 +68,10 @@ class DeepSeekClient(LLMClient):
         Raises:
             httpx.ConnectError: If the connection fails after all retries.
             httpx.ReadTimeout: If the read times out after all retries.
-            httpx.HTTPStatusError: If the API returns 500/429 after all retries.
+            httpx.HTTPStatusError: If the API returns a retriable status
+                (500/429) after all retries, or any non-200 status that is
+                not retried (e.g. 401, 403, 400).
         """
-        url = "https://api.deepseek.com/chat/completions"
         headers = {
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
@@ -71,19 +85,25 @@ class DeepSeekClient(LLMClient):
         last_exception: Exception | None = None
         for _ in range(self._retry_count + 1):
             try:
-                response = self._client.post(url, headers=headers, json=body)
+                response = self._client.post(_API_URL, headers=headers, json=body)
             except (httpx.ConnectError, httpx.ReadTimeout) as exc:
                 last_exception = exc
                 continue
-            if response.status_code in (500, 429):
+            if response.status_code in _RETRY_STATUS_CODES:
                 last_exception = httpx.HTTPStatusError(
                     f"HTTP {response.status_code}",
                     request=response.request,
                     response=response,
                 )
                 continue
+            if response.status_code != 200:
+                response.raise_for_status()
             return self._parse_response(response)
-        assert last_exception is not None
+        if last_exception is None:
+            raise RuntimeError(
+                "retry loop exited without an exception; "
+                "check that retry_count is non-negative"
+            )
         raise last_exception
 
     @staticmethod
@@ -91,7 +111,7 @@ class DeepSeekClient(LLMClient):
         """Parse a successful DeepSeek API response into an LLMResponse.
 
         Args:
-            response: The httpx response from the DeepSeek API.
+            response: The httpx response from the DeepSeek API (status 200).
 
         Returns:
             An :class:`LLMResponse` with content, finish reason, and tool calls.
