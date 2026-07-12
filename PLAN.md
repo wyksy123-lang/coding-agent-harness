@@ -275,11 +275,7 @@ T29 (final acceptance) ← depends on all
 11. **对应 worktree 和 PR 范围**: `feature/tools` / PR4
 12. **完成状态及 commit hash 记录位置**: 本文件 T06 行；AGENT_LOG.md
 
-**状态**: ⬜ TODO | **Commit**: —
-
----
-
-## T07: 文件操作工具（write_file / read_file / list_files）
+**状态**: ✅ DONE | **Commit**: cdbfdd6 (Red), c9431a2 (Green), 5636470 (Refactor)
 
 1. **TASK 编号**: T07
 2. **目标**: 实现三个文件操作工具，经 PathGuard 检查后执行文件读写。
