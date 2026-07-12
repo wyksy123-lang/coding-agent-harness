@@ -1,0 +1,25 @@
+# harness.yaml — 所有配置项均为扁平 snake_case 键
+max_rounds: 10
+target_directory: ./workspace
+test_command: "pytest --json-report --output=.harness/report.json"
+model: "deepseek-chat"
+temperature: 0.1
+memory_file: ".harness/memory.json"
+enabled_tools:
+  - write_file
+  - read_file
+  - list_files
+  - run_tests
+  - run_command
+  - finish
+dangerous_command_patterns:
+  - "rm\\s+-rf"
+  - "git\\s+push"
+  - "sudo\\s+"
+  - "curl\\s+|wget\\s+"
+  - "docker\\s+"
+hitl_timeout_seconds: 300
+llm_timeout: 60
+pytest_timeout: 60
+stuck_threshold: 3
+llm_retry_count: 3
