@@ -1,0 +1,31 @@
+{
+  "created": 1.7,
+  "duration": 0.05,
+  "exitcode": 0,
+  "root": "/tmp/tests",
+  "summary": {
+    "passed": 2,
+    "total": 2,
+    "collected": 2
+  },
+  "tests": [
+    {
+      "nodeid": "test_pass.py::test_pass_one",
+      "outcome": "passed",
+      "duration": 0.01,
+      "call": {
+        "duration": 0.01,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "test_pass.py::test_pass_two",
+      "outcome": "passed",
+      "duration": 0.01,
+      "call": {
+        "duration": 0.01,
+        "outcome": "passed"
+      }
+    }
+  ]
+}

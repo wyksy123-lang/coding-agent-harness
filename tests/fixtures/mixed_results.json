@@ -1,0 +1,76 @@
+{
+  "created": 1.7,
+  "duration": 0.1,
+  "exitcode": 1,
+  "root": "/tmp/tests",
+  "summary": {
+    "passed": 2,
+    "failed": 2,
+    "total": 4,
+    "collected": 4
+  },
+  "tests": [
+    {
+      "nodeid": "test_mixed.py::test_pass_one",
+      "outcome": "passed",
+      "duration": 0.01,
+      "call": {
+        "duration": 0.01,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "test_mixed.py::test_pass_two",
+      "outcome": "passed",
+      "duration": 0.01,
+      "call": {
+        "duration": 0.01,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "test_mixed.py::test_assertion_fail",
+      "outcome": "failed",
+      "duration": 0.02,
+      "call": {
+        "duration": 0.02,
+        "outcome": "failed",
+        "crash": {
+          "path": "/tmp/test_mixed.py",
+          "lineno": 12,
+          "message": "assert 3 == 5"
+        },
+        "traceback": [
+          {
+            "path": "/tmp/test_mixed.py",
+            "lineno": 12,
+            "message": "AssertionError"
+          }
+        ],
+        "longrepr": "def test_assertion_fail():\n>       assert 3 == 5\nE       assert 3 == 5\n\n/tmp/test_mixed.py:12: AssertionError"
+      }
+    },
+    {
+      "nodeid": "test_mixed.py::test_import_fail",
+      "outcome": "failed",
+      "duration": 0.02,
+      "call": {
+        "duration": 0.02,
+        "outcome": "failed",
+        "crash": {
+          "path": "/tmp/test_mixed.py",
+          "lineno": 20,
+          "message": "ImportError: cannot import name 'missing_func' from 'some_module'"
+        },
+        "traceback": [
+          {
+            "path": "/tmp/test_mixed.py",
+            "lineno": 20,
+            "message": "ImportError"
+          }
+        ],
+        "longrepr": "def test_import_fail():\n>       from some_module import missing_func\nE       ImportError: cannot import name 'missing_func' from 'some_module'"
+      }
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "created": 1.7,
+  "duration": 0.06,
+  "exitcode": 1,
+  "root": "/tmp/tests",
+  "summary": {
+    "passed": 1,
+    "failed": 1,
+    "total": 2,
+    "collected": 2
+  },
+  "tests": [
+    {
+      "nodeid": "test_type.py::test_pass",
+      "outcome": "passed",
+      "duration": 0.01,
+      "call": {
+        "duration": 0.01,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "test_type.py::test_value_error",
+      "outcome": "failed",
+      "duration": 0.02,
+      "call": {
+        "duration": 0.02,
+        "outcome": "failed",
+        "crash": {
+          "path": "/tmp/test_type.py",
+          "lineno": 8,
+          "message": "ValueError: invalid literal for int() with base 10: 'abc'"
+        },
+        "traceback": [
+          {
+            "path": "/tmp/test_type.py",
+            "lineno": 8,
+            "message": "ValueError"
+          }
+        ],
+        "longrepr": "def test_value_error():\n>       int('abc')\nE       ValueError: invalid literal for int() with base 10: 'abc'\n\n/tmp/test_type.py:8: ValueError"
+      }
+    }
+  ]
+}

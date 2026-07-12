@@ -1,0 +1,45 @@
+{
+  "created": 1.7,
+  "duration": 0.06,
+  "exitcode": 1,
+  "root": "/tmp/tests",
+  "summary": {
+    "passed": 1,
+    "failed": 1,
+    "total": 2,
+    "collected": 2
+  },
+  "tests": [
+    {
+      "nodeid": "test_sample.py::test_pass",
+      "outcome": "passed",
+      "duration": 0.01,
+      "call": {
+        "duration": 0.01,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "test_sample.py::test_assertion_fail",
+      "outcome": "failed",
+      "duration": 0.02,
+      "call": {
+        "duration": 0.02,
+        "outcome": "failed",
+        "crash": {
+          "path": "/tmp/test_sample.py",
+          "lineno": 5,
+          "message": "assert 1 == 2"
+        },
+        "traceback": [
+          {
+            "path": "/tmp/test_sample.py",
+            "lineno": 5,
+            "message": "AssertionError"
+          }
+        ],
+        "longrepr": "def test_assertion_fail():\n>       assert 1 == 2\nE       assert 1 == 2\n\n/tmp/test_sample.py:5: AssertionError"
+      }
+    }
+  ]
+}

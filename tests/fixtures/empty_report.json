@@ -1,0 +1,11 @@
+{
+  "created": 1.7,
+  "duration": 0.0,
+  "exitcode": 0,
+  "root": "/tmp/tests",
+  "summary": {
+    "total": 0,
+    "collected": 0
+  },
+  "tests": []
+}
