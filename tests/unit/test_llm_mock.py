@@ -200,6 +200,28 @@ class TestMockLLMClientRecordsCalls:
         client.chat(messages=[], tools=tools)
         assert client.recorded_calls[0].tools == tools
 
+    def test_call_recorded_even_when_exhausted(self):
+        r1 = LLMResponse(content="only", tool_calls=[], finish_reason="stop")
+        client = MockLLMClient([r1])
+        client.chat(messages=[], tools=[])
+        with pytest.raises(StopIteration):
+            client.chat(messages=[], tools=[])
+        assert len(client.recorded_calls) == 2
+
+    def test_recorded_messages_isolated_from_caller_mutations(self):
+        client = MockLLMClient([_make_response()])
+        messages = [{"role": "user", "content": "hello"}]
+        client.chat(messages=messages, tools=[])
+        messages.append({"role": "user", "content": "mutated"})
+        assert len(client.recorded_calls[0].messages) == 1
+
+    def test_recorded_tools_isolated_from_caller_mutations(self):
+        client = MockLLMClient([_make_response()])
+        tools = [{"type": "function", "function": {"name": "write_file"}}]
+        client.chat(messages=[], tools=tools)
+        tools.append({"type": "function", "function": {"name": "read_file"}})
+        assert len(client.recorded_calls[0].tools) == 1
+
 
 class TestMockLLMClientEdgeCases:
     def test_empty_response_list_raises_on_first_call(self):
