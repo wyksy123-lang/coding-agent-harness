@@ -822,3 +822,189 @@
 1. MockLLMClient 的实现非常简洁（90 行实现 + 283 行测试），Red→Green 过程顺畅，无 Critical/Major 问题——这得益于 T03 ABC 抽象层定义的清晰契约。
 2. Code Quality Review 发现的 Minor 问题（recorded_calls 引用存储）是一个典型的"测试驱动开发可能遗漏的边缘情况"——测试验证了记录的内容正确，但未验证记录的独立性。在 review 阶段补充隔离测试是必要的。
 3. StopIteration 作为耗尽异常是一个设计选择——PEP 479 的风险仅在 generator 上下文中存在，而 AgentLoop 将使用常规循环。保留 StopIteration 与测试契约一致，避免不必要的范围扩大。
+
+---
+
+## LOG-015 — TASK-05 Red 阶段
+
+**时间戳**：2026-07-12
+
+**Task 编号**：TASK-05（DeepSeekClient）
+
+**触发的 Superpowers 技能**：
+- `subagent-driven-development`
+- `test-driven-development`
+
+**subagent 信息**：
+- 类型：`general`
+- Task ID：`ses_0aa7c596effeTq1iRr22uuw0yL`
+- 关键 prompt：仅编写 `tests/unit/test_llm_deepseek.py` 失败测试，不写任何实现代码
+
+**subagent 执行内容**：
+1. 编写 `tests/unit/test_llm_deepseek.py`（627 行，40 个测试，8 个测试类）
+   - TestDeepSeekClientConstruction（5 个测试）：验证构造、issubclass(LLMClient)、isinstance、transport 参数、transport 默认 None
+   - TestDeepSeekClientRequestConstruction（8 个测试）：验证 POST 方法、URL 含 deepseek.com/chat/completions、Authorization Bearer header、body 含 model/messages/tools/temperature
+   - TestDeepSeekClientResponseParsingNoToolCalls（4 个测试）：验证返回 LLMResponse、content 正确、finish_reason=stop、空 tool_calls
+   - TestDeepSeekClientResponseParsingWithToolCalls（6 个测试）：验证 tool_call id/name/arguments（JSON string→dict）、dict 类型、finish_reason=tool_calls、ToolCall 实例
+   - TestDeepSeekClientResponseParsingMultipleToolCalls（3 个测试）：验证多个 tool_calls 解析、不同 arguments、顺序保持
+   - TestDeepSeekClientRetryLogic（9 个测试）：验证 ConnectError/ReadTimeout/HTTP500/HTTP429 重试、retry_count=0/1 语义、重试后成功、成功不重试
+   - TestDeepSeekClientTimeout（3 个测试）：验证 timeout 传递给 httpx.Client、不同值、带 transport
+   - TestDeepSeekClientNoHardcodedApiKey（2 个测试）：验证 api_key 无默认值、源码无 "sk-" 字符串
+
+**Red 阶段验证**：
+- 命令：`pytest tests/unit/test_llm_deepseek.py -v`
+- 退出状态码：`2`（collection error）
+- 关键失败原因：
+  ```
+  ModuleNotFoundError: No module named 'harness.llm.deepseek'
+  ```
+- 结果：0 collected, 1 error
+- 失败原因确认：`harness/llm/deepseek.py` 尚未创建，测试因导入目标模块不存在而失败。测试文件本身语法正确，导入语句合法，断言全面。**不是语法错误、环境错误或测试本身错误。**
+
+**人工干预**：无
+
+**Commit hash**：`9bd284c` (test(T05): add failing tests)
+
+**教训**：—
+
+---
+
+## LOG-016 — TASK-05 Green 阶段
+
+**时间戳**：2026-07-12
+
+**Task 编号**：TASK-05（DeepSeekClient）
+
+**触发的 Superpowers 技能**：
+- `subagent-driven-development`
+- `test-driven-development`
+
+**subagent 信息**：
+- 类型：`general`
+- Task ID：`ses_0aa5fa3e2ffe9GndC59moOA7AN`
+- 关键 prompt：仅实现让 `tests/unit/test_llm_deepseek.py` 通过的最少代码
+
+**subagent 执行内容**：
+1. 创建 `harness/llm/deepseek.py`（117 行）：
+   - `DeepSeekClient(LLMClient)`：继承 LLMClient ABC
+     - `__init__(api_key, model, temperature, timeout, retry_count, transport=None)`：存储参数，创建 httpx.Client（transport 可选注入用于测试）
+     - `chat(messages, tools) -> LLMResponse`：POST 到 `https://api.deepseek.com/chat/completions`，Bearer auth，body 含 model/messages/tools/temperature，重试逻辑（retry_count+1 次尝试），解析响应
+     - `_parse_response(response) -> LLMResponse`（staticmethod）：解析 choices[0].message，提取 content/finish_reason/tool_calls（arguments JSON string→dict）
+
+**Green 阶段验证**：
+- 命令：`pytest tests/unit/test_llm_deepseek.py -v`
+- 退出状态码：`0`
+- 结果：**40 passed** in 0.15s
+- 从 Red 到 Green：`ModuleNotFoundError` → 全部 40 个测试通过
+- 回归检查：`pytest tests/ -v` 同样 190 passed，无回归
+
+**人工干预**：无
+
+**Commit hash**：`97a8632` (feat(T05): implement minimal green solution)
+
+**教训**：—
+
+---
+
+## LOG-017 — TASK-05 Refactor + 两阶段评审 + 最终验证
+
+**时间戳**：2026-07-12
+
+**Task 编号**：TASK-05（DeepSeekClient）
+
+**触发的 Superpowers 技能**：
+- `test-driven-development`（重构阶段）
+- `subagent-driven-development`（Code Quality Review subagent）
+
+### Refactor 阶段
+
+**执行内容**：
+1. 修复 6 个 B017 lint 警告：`pytest.raises(Exception)` → 具体异常类型（`httpx.ConnectError`/`httpx.ReadTimeout`/`httpx.HTTPStatusError`）
+2. 修复 Code Quality Review 发现的 1 个 Major + 6 个 Minor 问题：
+   - CQ-1（Major）：非重试 HTTP 错误状态码（401/403/400 等）产生混淆的 KeyError → 添加 `response.raise_for_status()` 显式检查非 200 状态码
+   - CQ-3（Minor）：`assert last_exception is not None` 在 `python -O` 下被剥离 → 替换为显式 RuntimeError 守卫
+   - CQ-4（Minor）：httpx.Client 无资源清理 → 添加 `close()` 方法和 `__enter__`/`__exit__` 上下文管理器
+   - CQ-5（Minor）：缺少边缘情况测试 → 添加 9 个新测试（非重试 HTTP 错误、资源清理、负 retry_count）
+   - CQ-6（Minor）：URL 硬编码为局部变量 → 提取为模块级常量 `_API_URL`
+   - CQ-7（Minor）：docstring Raises 节不完整 → 更新以覆盖非重试 HTTP 错误
+3. 重试状态码提取为 `frozenset` 常量 `_RETRY_STATUS_CODES`
+
+**验证**：`pytest tests/unit/test_llm_deepseek.py -v` → 49 passed（从 40 增至 49）
+
+### 第一阶段：Specification Compliance Review
+
+**对照**：SPEC.md §5.1（组件图）、§5.3（外部依赖）、§8（技术选型）、§4.2（安全 T1）、§3.6.1（配置项）、PLAN.md T05
+
+**发现 Critical 问题及修复**：无 Critical 问题
+
+**检查结果**：
+
+| 检查项 | 结果 |
+|---|---|
+| DeepSeekClient(api_key, model, temperature, timeout, retry_count) 构造函数 | ✅ 符合 |
+| chat(messages, tools) -> LLMResponse 方法签名 | ✅ 符合 |
+| POST 到 DeepSeek API（OpenAI 兼容） | ✅ 符合 |
+| 重试机制：retry_count 次后抛异常 | ✅ 符合 |
+| 超时控制：timeout 秒 | ✅ 符合 |
+| 不硬编码 API key（构造函数注入） | ✅ 符合 |
+| 使用 httpx.MockTransport（无真实网络） | ✅ 符合 |
+| 无越界实现（未实现 T06+） | ✅ 符合 |
+
+**越界实现检查**：无越界（`transport` 参数是测试依赖注入便利，非越界功能）
+
+### 第二阶段：Code Quality Review
+
+**subagent 信息**：
+- 类型：`general`（reviewer 角色）
+- Task ID：`ses_0aa5631deffe2Rb5glZ7g1tLdL`
+- 关键 prompt：审查 T05 代码质量，检查 8 项标准
+
+**审查结果摘要**：
+
+| # | 标准 | 判定 | 严重度 |
+|---|---|---|---|
+| 1 | 职责划分 | PASS | — |
+| 2 | 可读性 | PASS | — |
+| 3 | 接口和类型 | PASS | — |
+| 4 | 错误处理 | WARN | Major（非重试 HTTP 错误产生 KeyError → 已修复） |
+| 5 | 安全边界 | PASS | — |
+| 6 | 测试质量 | WARN | Minor（缺少边缘情况测试 → 已修复） |
+| 7 | 可维护性 | WARN | Minor（无资源清理/assert 脆弱/URL 硬编码 → 已修复） |
+| 8 | 无真实网络/LLM 依赖 | PASS | — |
+
+**修复的问题**：
+
+| # | 问题 | 严重度 | 修复 |
+|---|---|---|---|
+| CQ-1 | 非重试 HTTP 错误状态码（401/403/400）产生混淆 KeyError | Major | 添加 `response.raise_for_status()` 显式检查 |
+| CQ-3 | `assert last_exception is not None` 在 `python -O` 下被剥离 | Minor | 替换为显式 RuntimeError 守卫 |
+| CQ-4 | httpx.Client 无资源清理 | Minor | 添加 close() + __enter__/__exit__ |
+| CQ-5 | 缺少边缘情况测试 | Minor | 添加 9 个新测试 |
+| CQ-6 | URL 硬编码为局部变量 | Minor | 提取为模块级常量 |
+| CQ-7 | docstring Raises 节不完整 | Minor | 更新覆盖非重试 HTTP 错误 |
+
+**未修复（合理保留）**：
+- CQ-2：`_parse_response` 不防御性处理缺失字段——DeepSeek API 契约保证字段存在，信任契约是合理的
+- 重试无退避延迟——PLAN 未要求退避，立即重试是可接受的设计选择
+
+### 最终验证
+
+| 检查项 | 命令 | 结果 |
+|---|---|---|
+| 目标测试 | `pytest tests/unit/test_llm_deepseek.py -v` | **49 passed** in 0.19s |
+| 完整测试套件 | `pytest tests/ -v` | **199 passed** in 0.30s |
+| Lint | `ruff check harness/llm/deepseek.py tests/unit/test_llm_deepseek.py` | All checks passed! |
+| 类型检查 | `mypy harness/llm/deepseek.py` | Success: no issues found in 1 source file |
+| 凭据泄露检查 | `grep -rni "api_key\|secret\|password\|token\|sk-" harness/llm/deepseek.py` | 仅参数名 `api_key`（无真实凭据） |
+| 测试文件检查 | `grep -rni "sk-" tests/unit/test_llm_deepseek.py` | 仅 `FAKE_API_KEY = "sk-fake-test-key-not-real"`（明显合成值） |
+| Git 历史扫描 | `git log --all -p \| grep -i "api_key\|secret\|password"` | 仅参数名和文档引用，无真实凭据 |
+
+**Commit hash**：`8b46398` (refactor(T05): complete reviews and verification)
+
+**人工干预**：无
+
+**教训**：
+1. DeepSeekClient 是第一个涉及真实网络 HTTP 调用的模块——httpx.MockTransport 的 transport 注入模式是测试真实 HTTP 客户端的标准方法，无需真实网络。这验证了 R053（mock/stub LLM 驱动确定性单测）在 HTTP 客户端层面的可行性。
+2. Code Quality Review 发现的 Major 问题（CQ-1：非重试 HTTP 错误产生 KeyError）是一个典型的"happy path 测试驱动开发可能遗漏的错误路径"——40 个测试全部通过，但 401/403 等认证错误会产生混淆的 KeyError 而非有意义的 HTTPStatusError。在 review 阶段补充错误路径测试是必要的。
+3. `assert` 语句在 `python -O` 下会被剥离——生产代码中不应依赖 assert 做运行时检查，应使用显式条件判断和异常抛出。
+4. httpx.Client 持有连接池资源——提供 `close()` 方法和上下文管理器协议是资源管理的最佳实践，避免连接泄漏。
