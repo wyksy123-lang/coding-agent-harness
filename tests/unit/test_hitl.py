@@ -453,13 +453,17 @@ class TestHITLStateUnknownId:
         with pytest.raises(KeyError):
             HITLState().deny("")
 
+    def test_check_timeout_empty_string_id_raises_keyerror(self):
+        with pytest.raises(KeyError):
+            HITLState().check_timeout("")
+
 
 class TestHITLStateEdgeCases:
     """Additional edge cases for robustness."""
 
     def test_create_none_action_raises(self):
-        """``create`` with ``None`` action must raise (defensive)."""
-        with pytest.raises((ValueError, TypeError)):
+        """``create`` with ``None`` action must raise ``ValueError``."""
+        with pytest.raises(ValueError, match="action"):
             HITLState().create(None, timeout=300)  # type: ignore[arg-type]
 
     def test_multiple_instances_are_independent(self):
