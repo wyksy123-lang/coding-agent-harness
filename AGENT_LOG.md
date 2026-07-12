@@ -282,3 +282,199 @@
 1. Config 默认值必须严格对照 SPEC 配置表——初版测试和实现都用了空列表作为默认值，与 SPEC 不符。冷启动验证（Gate C）虽修复了类型定义和 YAML 示例，但未检查默认值一致性。
 2. `TestResult` 以 `Test` 开头会被 pytest 误收集——`__test__ = False` 是标准解法，应在未来所有以 `Test` 开头的非测试类上一致使用。
 3. Code Quality Review 的 Major 问题（enum/str 不匹配）在 Red 阶段测试中已埋下——测试用 `FailureType.IMPORT.value` 而非 `FailureType.IMPORT`，说明 TDD 红绿循环不能替代类型安全审查。
+
+---
+
+## LOG-006 — TASK-02 Red 阶段
+
+**时间戳**：2026-07-12
+
+**Task 编号**：TASK-02（配置模块 ConfigLoader）
+
+**触发的 Superpowers 技能**：
+- `subagent-driven-development`
+- `test-driven-development`
+
+**subagent 信息**：
+- 类型：`general`
+- Task ID：`ses_0ab2b3f87ffe4AG47qrEJHvC2t`
+- 关键 prompt：仅编写 `tests/unit/test_config.py` 失败测试，不写任何实现代码
+
+**subagent 执行内容**：
+1. 编写 `tests/unit/test_config.py`（305 行，33 个测试，8 个测试类）
+   - TestConfigError（4 个测试）：验证 ConfigError 是 Exception 子类、可抛出、携带消息、与 ValueError/KeyError 不同
+   - TestConfigLoaderLoadValid（4 个测试）：验证加载有效 YAML 返回 Config、解析全部 13 个字段、接受 pathlib.Path、字符串值处理
+   - TestConfigLoaderDefaults（4 个测试）：验证单字段设置其余默认、空 YAML 全默认、部分字段填充默认、文档分隔符返回默认
+   - TestConfigLoaderUnknownFields（3 个测试）：验证未知字段被忽略、不附加到 Config、嵌套未知字段被忽略
+   - TestConfigLoaderInvalidYaml（3 个测试）：验证无效 YAML 抛 ConfigError、Tab 缩进抛异常、文件不存在抛异常
+   - TestConfigLoaderTypeValidation（7 个测试）：验证 max_rounds/temperature/hitl_timeout 为字符串抛异常、enabled_tools 为非列表抛异常、dangerous_patterns 为 int 抛异常、列表元素非字符串抛异常
+   - TestConfigLoaderFieldTypes（5 个测试）：验证 dangerous_command_patterns 为 list[str]、enabled_tools 为 list[str]、max_rounds 为 int（非 bool）、temperature 为 float、默认 patterns 为 regex 字符串
+   - TestHarnessYamlExample（5 个测试）：验证 example 文件存在、可加载、包含全部 13 个字段、enabled_tools 为字符串、dangerous_patterns 为字符串
+
+**Red 阶段验证**：
+- 命令：`pytest tests/unit/test_config.py -v`
+- 退出状态码：`2`（collection error）
+- 关键失败原因：
+  ```
+  ModuleNotFoundError: No module named 'harness.config'
+  ```
+- 结果：0 collected, 1 error
+- 失败原因确认：`harness/config/` 包尚未创建，测试因导入目标模块不存在而失败。测试文件本身语法正确，导入语句合法，断言全面。**不是语法错误、环境错误或测试本身错误。**
+
+**人工干预**：无
+
+**Commit hash**：`e501189` (test(T02): add failing tests)
+
+**教训**：—
+
+---
+
+## LOG-007 — TASK-02 Green 阶段
+
+**时间戳**：2026-07-12
+
+**Task 编号**：TASK-02（配置模块 ConfigLoader）
+
+**触发的 Superpowers 技能**：
+- `subagent-driven-development`
+- `test-driven-development`
+
+**subagent 信息**：
+- 类型：`general`
+- Task ID：`ses_0ab22d27bffeuez539HhMekYEL`
+- 关键 prompt：仅实现让 `tests/unit/test_config.py` 通过的最少代码
+
+**subagent 执行内容**：
+1. 创建 `harness/config/__init__.py`（空文件）
+2. 创建 `harness/config/loader.py`（91 行）：
+   - `ConfigError(Exception)`：自定义异常类
+   - 4 个字段集合常量：`_INT_FIELDS`（6 个 int 字段）、`_FLOAT_FIELDS`（temperature）、`_STR_FIELDS`（4 个 str 字段）、`_STR_LIST_FIELDS`（2 个 list[str] 字段）
+   - `ConfigLoader` 类：`@staticmethod load(path: str | Path) -> Config`
+   - 使用 `yaml.safe_load` 解析 YAML
+   - 类型验证：int 字段拒绝 bool 和非 int；float 字段拒绝 bool 和非数值；str 字段拒绝非 str；list 字段拒绝非 list 和非 str 元素
+   - 缺失字段用 Config 默认值填充；未知字段忽略
+   - FileNotFoundError 和 yaml.YAMLError 包装为 ConfigError
+3. 创建 `harness.yaml.example`（25 行）：包含全部 13 个配置项，扁平 snake_case 键，与 SPEC §3.6.1 完全一致
+
+**Green 阶段验证**：
+- 命令：`pytest tests/unit/test_config.py -v`
+- 退出状态码：`0`
+- 结果：**35 passed** in 0.05s
+- 从 Red 到 Green：`ModuleNotFoundError` → 全部 35 个测试通过
+- 回归检查：`pytest tests/ -v` 同样 81 passed，无回归
+
+**人工干预**：无
+
+**Commit hash**：`bfe7750` (feat(T02): implement minimal green solution)
+
+**教训**：—
+
+---
+
+## LOG-008 — TASK-02 Refactor + 两阶段评审 + 最终验证
+
+**时间戳**：2026-07-12
+
+**Task 编号**：TASK-02（配置模块 ConfigLoader）
+
+**触发的 Superpowers 技能**：
+- `test-driven-development`（重构阶段）
+- `subagent-driven-development`（Code Quality Review subagent）
+
+### Refactor 阶段
+
+**执行内容**：
+1. 修复 ruff 导入排序问题（`tests/unit/test_config.py` 导入块未排序）
+2. 添加 mypy 配置覆盖：`pyproject.toml` 添加 `[[tool.mypy.overrides]]` 忽略 yaml 模块缺失的类型存根（`types-PyYAML` 在当前环境无法安装）
+3. 修复 Code Quality Review 发现的 Minor 问题：
+   - E-1：添加 `except OSError` 处理 `IsADirectoryError`/`PermissionError` 等 I/O 错误
+   - R-1：为 `ConfigLoader` 类和 `load` 方法添加 docstring
+   - T-1/T-2：添加 bool-as-int 和 bool-as-float 拒绝测试
+   - T-3：添加非 dict YAML root（list/scalar）拒绝测试
+   - T-4：添加 int→float 类型强转测试
+   - T-5：添加列表值拷贝隔离测试
+   - T-7：添加 null 值拒绝测试
+
+**验证**：`pytest tests/unit/test_config.py -v` → 42 passed（从 35 增至 42）
+
+### 第一阶段：Specification Compliance Review
+
+**对照**：SPEC.md §3.6.1（ConfigLoader）、§3.6.1（harness.yaml.example）、§6.2（字段约束）、PLAN.md T02
+
+**发现 Critical 问题及修复**：无 Critical 问题
+
+**检查结果**：
+
+| 检查项 | 结果 |
+|---|---|
+| ConfigLoader.load(path) -> Config | ✅ 符合 |
+| 解析 YAML → 校验 → 构造 Config | ✅ 符合 |
+| 缺失字段用默认值填充 | ✅ 符合 |
+| 未知字段忽略 | ✅ 符合 |
+| YAML 解析失败 → ConfigError | ✅ 符合 |
+| 文件不存在 → ConfigError | ✅ 符合 |
+| harness.yaml.example 含全部 13 项 | ✅ 符合 |
+| 扁平 snake_case 键（无嵌套） | ✅ 符合 |
+| dangerous_command_patterns 为 list[str] | ✅ 符合 |
+| enabled_tools 为 list[str] | ✅ 符合 |
+
+**越界实现检查**：无越界（未实现 T03+ 的功能）
+
+**Minor 观察**：SPEC §6.2 字段约束（如 max_rounds > 0）未做值范围验证——但 SPEC §3.6.1 错误处理仅要求 YAML 解析失败和必填项缺失，值范围验证可推迟。
+
+### 第二阶段：Code Quality Review
+
+**subagent 信息**：
+- 类型：`general`（reviewer 角色）
+- Task ID：`ses_0ab1a3f29ffeu3uO09tI0opSZ6`
+- 关键 prompt：审查 T02 代码质量，检查 8 项标准
+
+**审查结果摘要**：
+
+| # | 标准 | 判定 | 严重度 |
+|---|---|---|---|
+| 1 | 职责划分 | PASS | — |
+| 2 | 可读性 | WARN | Minor（缺少 docstring → 已修复） |
+| 3 | 接口和类型 | PASS | — |
+| 4 | 错误处理 | WARN | Minor（OSError 未捕获 → 已修复） |
+| 5 | 安全边界 | PASS | — |
+| 6 | 测试质量 | WARN | Minor（缺少 bool/non-dict-root/coercion 测试 → 已修复） |
+| 7 | 可维护性 | WARN | Minor（字段集合与 Config 重复 → 保留，合理） |
+| 8 | 无真实网络/LLM 依赖 | PASS | — |
+
+**修复的 Minor 问题**：
+
+| # | 问题 | 严重度 | 修复 |
+|---|---|---|---|
+| E-1 | `IsADirectoryError`/`PermissionError` 未捕获 | Minor | 添加 `except OSError` 处理 |
+| R-1 | ConfigLoader/load 缺少 docstring | Minor | 添加 docstring |
+| T-1 | 缺少 bool-as-int 拒绝测试 | Minor | 添加 `test_bool_for_int_field_raises_config_error` |
+| T-2 | 缺少 bool-as-float 拒绝测试 | Minor | 添加 `test_bool_for_float_field_raises_config_error` |
+| T-3 | 缺少非 dict root 测试 | Minor | 添加 `test_list_root_raises_config_error` + `test_scalar_root_raises_config_error` |
+| T-4 | 缺少 int→float 强转测试 | Minor | 添加 `test_int_temperature_coerced_to_float` |
+| T-5 | 缺少列表拷贝隔离测试 | Minor | 添加 `test_list_values_are_copied_not_aliased` |
+| T-7 | 缺少 null 值拒绝测试 | Minor | 添加 `test_null_value_for_int_field_raises_config_error` |
+
+**未修复（合理保留）**：
+- 字段集合与 Config dataclass 重复：保持手动同步，避免过度工程化
+- 值范围验证（max_rounds > 0 等）：SPEC §3.6.1 未要求，推迟到后续 task
+- `harness/config/__init__.py` 未 re-export：测试直接从 loader 导入，无需 re-export
+
+### 最终验证
+
+| 检查项 | 命令 | 结果 |
+|---|---|---|
+| 完整测试套件 | `pytest tests/ -v` | **88 passed** in 0.09s |
+| Lint | `ruff check harness/ tests/` | All checks passed! |
+| 类型检查 | `mypy harness/` | Success: no issues found in 4 source files |
+| 凭据泄露检查 | `grep -rni "api_key\|secret\|password\|token\|sk-" harness/config/ tests/unit/test_config.py harness.yaml.example` | 无匹配（源码无凭据） |
+| Git 历史扫描 | `git log --all -p \| grep -i "api_key\|secret\|password"` | 仅文档引用（PLAN/SPEC/AGENT_LOG 中概念性提及），无真实凭据 |
+
+**Commit hash**：`c70afe7` (refactor(T02): complete reviews and verification)
+
+**人工干预**：无
+
+**教训**：
+1. ruff 导入排序规则（I001）在 Red 阶段测试文件中容易触发——应在 Green 阶段后立即运行 `ruff check --fix` 而非等到 Refactor 阶段。
+2. mypy strict 模式对第三方库（如 yaml）要求类型存根——当 `types-PyYAML` 无法安装时，`[[tool.mypy.overrides]]` + `ignore_missing_imports = true` 是干净的解决方案。
+3. Code Quality Review 发现的 8 个 Minor 测试覆盖缺口（bool 拒绝、非 dict root、类型强转、列表拷贝隔离）全部是代码已正确处理但测试未验证的边缘情况——说明 Red 阶段测试编写时应更积极地覆盖 Python 类型系统的边缘情况（bool 是 int 子类、None 值、YAML 非 dict root 等）。
