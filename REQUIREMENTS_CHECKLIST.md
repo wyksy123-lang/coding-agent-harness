@@ -22,10 +22,10 @@
 | R005 | 要求1 §4.4 | 至少 3 轮关键迭代的对话节选与处理决策 | SPEC_PROCESS.md | 审查含 ≥3 轮迭代 | TODO | — |
 | R006 | 要求1 §4.5 | 冷启动验证：换一个不同类型 agent，新 session，仅给 SPEC+PLAN，选 1-2 task，遇不确定暂停询问 | SPEC_PROCESS.md 冷启动记录 | 审查第二个 agent 暂停点与 spec 缺陷 | DONE（Aider 冷启动完成，Gate C 通过） | — |
 | R007 | 要求1 §4.5 | 冷启动记录：暂停点、spec 缺陷、误读、产出差距、SPEC/PLAN 修订 diff | SPEC_PROCESS.md | 审查 before/after diff | DONE（6 个暂停点已记录，5 个缺陷已修复，修订后人工重新批准） | — |
-| R008 | 要求1 §4.6 | git worktree 隔离：每个独立功能/大模块一个 worktree，对应一个 PR | git worktree list + PR 链接 | 审查 worktree 与 PR 一一对应 | IN PROGRESS（T01 + T02 + T03 + T04 + T05 + T06 + T07 + T09 worktree 已创建） | T01-T29 |
-| R009 | 要求1 §4.6 | 每个任务派一个新鲜 subagent 完成 | AGENT_LOG.md | 审查每 task 有独立 subagent 记录 | IN PROGRESS（T01 + T02 + T03 + T04 + T05 + T06 + T07 + T09 Red/Green/Review 各用独立 subagent） | T01-T29 |
-| R010 | 要求1 §4.6 + §3.6 | TDD 强制：红→绿→重构；先写失败测试、得到红色，再写最少代码变绿，再重构。不接受先写实现再补测试 | AGENT_LOG.md + commit 历史 | 审查 commit 顺序：test commit 在 impl commit 之前 | IN PROGRESS（T01: Red 68bd926 → Green fe41b92 → Refactor 79ccece；T02: Red e501189 → Green bfe7750 → Refactor c70afe7；T03: Red cda280a → Green fd04023 → Refactor f06b2a7；T04: Red db70b60 → Green cba9cd1 → Refactor 8e57cad；T05: Red 9bd284c → Green 97a8632 → Refactor 8b46398；T06: Red cdbfdd6 → Green c9431a2 → Refactor 5636470；T07: Red 945b468 → Green b7edbc1 → Refactor a47072a；T09: Red 26ac727 → Green 9915a30 → Refactor 7e6babd） | T01-T29 |
-| R011 | 要求1 §4.6 | 两阶段评审：先 spec 合规检查 → 再代码质量检查；Critical issue 必须修复才能进入下一 task | AGENT_LOG.md | 审查每 task 有两阶段评审记录 | IN PROGRESS（T01 两阶段评审已完成，3 Critical + 3 Major 已修复；T02 两阶段评审已完成，0 Critical + 8 Minor 已修复；T03 两阶段评审已完成，0 Critical + 5 Minor（1 已修复）；T04 两阶段评审已完成，0 Critical + 4 Minor 已修复；T05 两阶段评审已完成，0 Critical + 1 Major + 6 Minor 已修复；T06 两阶段评审已完成，1 Critical + 1 Major + 4 Minor 已修复；T07 两阶段评审已完成，0 Critical + 2 Major + 4 Minor 已修复；T09 两阶段评审已完成，0 Critical + 0 Major + 4 Minor（全部合理保留）） | T01-T29 |
+| R008 | 要求1 §4.6 | git worktree 隔离：每个独立功能/大模块一个 worktree，对应一个 PR | git worktree list + PR 链接 | 审查 worktree 与 PR 一一对应 | IN PROGRESS（T01 + T02 + T03 + T04 + T05 + T06 + T07 + T09 + T10 worktree 已创建） | T01-T29 |
+| R009 | 要求1 §4.6 | 每个任务派一个新鲜 subagent 完成 | AGENT_LOG.md | 审查每 task 有独立 subagent 记录 | IN PROGRESS（T01 + T02 + T03 + T04 + T05 + T06 + T07 + T09 + T10 Red/Green/Review 各用独立 subagent） | T01-T29 |
+| R010 | 要求1 §4.6 + §3.6 | TDD 强制：红→绿→重构；先写失败测试、得到红色，再写最少代码变绿，再重构。不接受先写实现再补测试 | AGENT_LOG.md + commit 历史 | 审查 commit 顺序：test commit 在 impl commit 之前 | IN PROGRESS（T01: Red 68bd926 → Green fe41b92 → Refactor 79ccece；T02: Red e501189 → Green bfe7750 → Refactor c70afe7；T03: Red cda280a → Green fd04023 → Refactor f06b2a7；T04: Red db70b60 → Green cba9cd1 → Refactor 8e57cad；T05: Red 9bd284c → Green 97a8632 → Refactor 8b46398；T06: Red cdbfdd6 → Green c9431a2 → Refactor 5636470；T07: Red 945b468 → Green b7edbc1 → Refactor a47072a；T09: Red 26ac727 → Green 9915a30 → Refactor 7e6babd；T10: Red 4bdfcfe → Green 308ed0b → Refactor e476d48） | T01-T29 |
+| R011 | 要求1 §4.6 | 两阶段评审：先 spec 合规检查 → 再代码质量检查；Critical issue 必须修复才能进入下一 task | AGENT_LOG.md | 审查每 task 有两阶段评审记录 | IN PROGRESS（T01 两阶段评审已完成，3 Critical + 3 Major 已修复；T02 两阶段评审已完成，0 Critical + 8 Minor 已修复；T03 两阶段评审已完成，0 Critical + 5 Minor（1 已修复）；T04 两阶段评审已完成，0 Critical + 4 Minor 已修复；T05 两阶段评审已完成，0 Critical + 1 Major + 6 Minor 已修复；T06 两阶段评审已完成，1 Critical + 1 Major + 4 Minor 已修复；T07 两阶段评审已完成，0 Critical + 2 Major + 4 Minor 已修复；T09 两阶段评审已完成，0 Critical + 0 Major + 4 Minor（全部合理保留）；T10 两阶段评审已完成，0 Critical + 0 Major + 8 Minor（4 已修复，4 合理保留）） | T01-T29 |
 | R012 | 要求1 §4.6 | finishing-a-development-branch 决定 merge/PR/保留/丢弃 | AGENT_LOG.md | 审查分支完成决策记录 | TODO | — |
 
 ## B. 交付文档
@@ -37,7 +37,7 @@
 | R015 | 要求1 §4.2 | 每个功能有客观验收标准 | SPEC.md §10 | 检查每功能有可判定标准 | TODO（SPEC 已创建，待用户审查） | — |
 | R016 | 要求1 §4.3 | PLAN.md：每 task 可由一个 subagent 一次会话完成；含目标、涉及文件、实现要点、验证步骤（含将要写的失败测试） | PLAN.md | 审查 task 粒度与字段完整性 | DONE（T01 已验证可由 subagent 完成） | T01 |
 | R017 | 要求1 §4.3 | PLAN 显式标出 task 间依赖与可并行部分 | PLAN.md | 检查依赖标注 | DONE（依赖图 + 并行计划已存在） | — |
-| R018 | 要求1 §4.7 | PLAN.md 持续更新：每完成一个 task 即标记完成并附 commit hash | PLAN.md + git log | 审查 task 状态与 commit hash | IN PROGRESS（T01 + T02 + T03 + T04 + T05 + T06 + T07 + T09 已标记 ✅ DONE + commit hash） | T01-T29 |
+| R018 | 要求1 §4.7 | PLAN.md 持续更新：每完成一个 task 即标记完成并附 commit hash | PLAN.md + git log | 审查 task 状态与 commit hash | IN PROGRESS（T01 + T02 + T03 + T04 + T05 + T06 + T07 + T09 + T10 已标记 ✅ DONE + commit hash） | T01-T29 |
 | R019 | 要求1 §4.4 | SPEC_PROCESS.md：brainstorming 关键节点、≥3 轮迭代、AI 建议采纳/推翻及理由、brainstorming 反思 | SPEC_PROCESS.md | 逐项检查 | TODO | — |
 | R020 | 要求1 §4.9 | AGENT_LOG.md：时间顺序，每条含时间戳、task 编号、Superpowers 技能、关键 prompt/context、subagent 输出/commit hash、人工干预、教训 | AGENT_LOG.md | 逐条检查字段完整性 | TODO | — |
 | R021 | 要求1 §五.4 | README.md 含：项目简介、安装、运行、分发命令、目录结构、安全边界说明 | README.md | 逐节检查 | TODO | — |
