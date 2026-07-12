@@ -207,8 +207,8 @@ class TestCommandGuardSafeCommands:
 class TestCommandGuardPartialMatches:
     """Dangerous patterns embedded in longer commands must be detected."""
 
-    def test_rm_rf_in_compound_command_pending(self):
-        result = CommandGuard.check("cd /tmp && rm -rf test", DEFAULT_PATTERNS)
+    def test_rm_rf_with_subshell_pending(self):
+        result = CommandGuard.check("$(rm -rf build)", DEFAULT_PATTERNS)
         assert result == GuardResult.PENDING
 
     def test_git_push_in_script_pending(self):
@@ -217,8 +217,8 @@ class TestCommandGuardPartialMatches:
         )
         assert result == GuardResult.PENDING
 
-    def test_sudo_in_middle_pending(self):
-        result = CommandGuard.check("cd /opt && sudo make install", DEFAULT_PATTERNS)
+    def test_sudo_with_env_var_pending(self):
+        result = CommandGuard.check("ENV=prod sudo make install", DEFAULT_PATTERNS)
         assert result == GuardResult.PENDING
 
     def test_curl_in_chain_pending(self):
@@ -514,3 +514,46 @@ class TestCommandGuardReturnType:
         assert allowed == GuardResult.ALLOW
         assert pending == GuardResult.PENDING
         assert allowed != pending
+
+
+class TestCommandGuardEdgeCases:
+    """Additional edge cases identified during Code Quality Review."""
+
+    def test_empty_string_pattern_matches_everything_pending(self):
+        """An empty-string pattern matches at position 0 of any command."""
+        result = CommandGuard.check("ls -la", [""])
+        assert result == GuardResult.PENDING
+
+    def test_empty_string_pattern_matches_empty_command_pending(self):
+        result = CommandGuard.check("", [""])
+        assert result == GuardResult.PENDING
+
+    def test_empty_string_pattern_among_valid_patterns_pending(self):
+        """Empty-string pattern alongside valid patterns still triggers PENDING."""
+        result = CommandGuard.check("ls -la", [r"rm\s+-rf", ""])
+        assert result == GuardResult.PENDING
+
+    def test_tab_in_command_matched_by_s_pattern_pending(self):
+        """``\\s+`` covers tabs, not just spaces."""
+        result = CommandGuard.check("rm\t-rf\t/", DEFAULT_PATTERNS)
+        assert result == GuardResult.PENDING
+
+    def test_newline_in_command_matched_by_s_pattern_pending(self):
+        """``\\s+`` covers newlines."""
+        result = CommandGuard.check("rm\n-rf\n/", DEFAULT_PATTERNS)
+        assert result == GuardResult.PENDING
+
+    def test_command_with_regex_metacharacters_allowed(self):
+        """Commands containing regex metacharacters like ``.`` or ``*`` are safe."""
+        result = CommandGuard.check("echo 'hello.world' && ls *.py", DEFAULT_PATTERNS)
+        assert result == GuardResult.ALLOW
+
+    def test_command_with_regex_metacharacter_brackets_allowed(self):
+        """Commands with ``[`` or ``]`` that are not dangerous are ALLOWed."""
+        result = CommandGuard.check("echo [test]", DEFAULT_PATTERNS)
+        assert result == GuardResult.ALLOW
+
+    def test_dangerous_pattern_with_metacharacter_in_command_pending(self):
+        """A dangerous command containing metacharacters is still detected."""
+        result = CommandGuard.check("rm -rf *.txt", DEFAULT_PATTERNS)
+        assert result == GuardResult.PENDING
