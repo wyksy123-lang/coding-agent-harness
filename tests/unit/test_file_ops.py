@@ -13,7 +13,7 @@ class TestWriteFileToolConstruction:
 
     def test_can_construct_with_target_directory(self, tmp_workspace):
         tool = WriteFileTool(target_directory=tmp_workspace)
-        assert tool is not None
+        assert isinstance(tool, WriteFileTool)
 
     def test_is_subclass_of_tool(self, tmp_workspace):
         tool = WriteFileTool(target_directory=tmp_workspace)
@@ -116,7 +116,7 @@ class TestWriteFileToolBoundary:
         tool = WriteFileTool(target_directory=tmp_workspace)
         result = tool.execute({"path": "../escape.txt", "content": "x"})
         assert result.success is False
-        assert result.error is not None
+        assert result.error == "path out of bounds"
         assert not os.path.exists(
             os.path.join(os.path.dirname(tmp_workspace), "escape.txt")
         )
@@ -125,20 +125,20 @@ class TestWriteFileToolBoundary:
         tool = WriteFileTool(target_directory=tmp_workspace)
         result = tool.execute({"path": "../../etc/passwd", "content": "x"})
         assert result.success is False
-        assert result.error is not None
+        assert result.error == "path out of bounds"
 
     def test_write_absolute_path_outside_target_blocked(self, tmp_workspace):
         tool = WriteFileTool(target_directory=tmp_workspace)
         result = tool.execute({"path": "/etc/evil.txt", "content": "x"})
         assert result.success is False
-        assert result.error is not None
+        assert result.error == "path out of bounds"
 
     def test_write_absolute_path_inside_target_blocked(self, tmp_workspace):
         tool = WriteFileTool(target_directory=tmp_workspace)
         abs_path = os.path.join(tmp_workspace, "inside.txt")
         result = tool.execute({"path": abs_path, "content": "x"})
         assert result.success is False
-        assert result.error is not None
+        assert result.error == "path out of bounds"
 
     def test_write_subdir_dot_dot_escape_blocked(self, tmp_workspace):
         tool = WriteFileTool(target_directory=tmp_workspace)
@@ -146,7 +146,7 @@ class TestWriteFileToolBoundary:
             {"path": "subdir/../../outside.txt", "content": "x"}
         )
         assert result.success is False
-        assert result.error is not None
+        assert result.error == "path out of bounds"
 
     def test_write_blocked_path_does_not_create_file(self, tmp_workspace):
         tool = WriteFileTool(target_directory=tmp_workspace)
@@ -161,7 +161,7 @@ class TestReadFileToolConstruction:
 
     def test_can_construct_with_target_directory(self, tmp_workspace):
         tool = ReadFileTool(target_directory=tmp_workspace)
-        assert tool is not None
+        assert isinstance(tool, ReadFileTool)
 
     def test_is_subclass_of_tool(self, tmp_workspace):
         tool = ReadFileTool(target_directory=tmp_workspace)
@@ -217,7 +217,7 @@ class TestReadFileToolReads:
         tool = ReadFileTool(target_directory=tmp_workspace)
         result = tool.execute({"path": "nope.txt"})
         assert result.success is False
-        assert result.error is not None
+        assert result.error == "file not found"
 
     def test_read_unicode_content(self, tmp_workspace):
         path = os.path.join(tmp_workspace, "u.txt")
@@ -245,13 +245,13 @@ class TestReadFileToolBoundary:
         tool = ReadFileTool(target_directory=tmp_workspace)
         result = tool.execute({"path": "../escape.txt"})
         assert result.success is False
-        assert result.error is not None
+        assert result.error == "path out of bounds"
 
     def test_read_absolute_path_outside_target_blocked(self, tmp_workspace):
         tool = ReadFileTool(target_directory=tmp_workspace)
         result = tool.execute({"path": "/etc/passwd"})
         assert result.success is False
-        assert result.error is not None
+        assert result.error == "path out of bounds"
 
     def test_read_absolute_path_inside_target_blocked(self, tmp_workspace):
         path = os.path.join(tmp_workspace, "inside.txt")
@@ -260,13 +260,13 @@ class TestReadFileToolBoundary:
         tool = ReadFileTool(target_directory=tmp_workspace)
         result = tool.execute({"path": path})
         assert result.success is False
-        assert result.error is not None
+        assert result.error == "path out of bounds"
 
     def test_read_double_dot_dot_blocked(self, tmp_workspace):
         tool = ReadFileTool(target_directory=tmp_workspace)
         result = tool.execute({"path": "../../etc/shadow"})
         assert result.success is False
-        assert result.error is not None
+        assert result.error == "path out of bounds"
 
 
 class TestListFilesToolConstruction:
@@ -274,7 +274,7 @@ class TestListFilesToolConstruction:
 
     def test_can_construct_with_target_directory(self, tmp_workspace):
         tool = ListFilesTool(target_directory=tmp_workspace)
-        assert tool is not None
+        assert isinstance(tool, ListFilesTool)
 
     def test_is_subclass_of_tool(self, tmp_workspace):
         tool = ListFilesTool(target_directory=tmp_workspace)
@@ -372,25 +372,25 @@ class TestListFilesToolBoundary:
         tool = ListFilesTool(target_directory=tmp_workspace)
         result = tool.execute({"path": ".."})
         assert result.success is False
-        assert result.error is not None
+        assert result.error == "path out of bounds"
 
     def test_list_absolute_path_outside_target_blocked(self, tmp_workspace):
         tool = ListFilesTool(target_directory=tmp_workspace)
         result = tool.execute({"path": "/etc"})
         assert result.success is False
-        assert result.error is not None
+        assert result.error == "path out of bounds"
 
     def test_list_absolute_path_inside_target_blocked(self, tmp_workspace):
         tool = ListFilesTool(target_directory=tmp_workspace)
         result = tool.execute({"path": tmp_workspace})
         assert result.success is False
-        assert result.error is not None
+        assert result.error == "path out of bounds"
 
     def test_list_double_dot_dot_blocked(self, tmp_workspace):
         tool = ListFilesTool(target_directory=tmp_workspace)
         result = tool.execute({"path": "../../"})
         assert result.success is False
-        assert result.error is not None
+        assert result.error == "path out of bounds"
 
 
 class TestFileOpsIntegration:
@@ -439,19 +439,19 @@ class TestFileOpsIntegration:
         write_tool = WriteFileTool(target_directory=tmp_workspace)
         result = write_tool.execute({"path": "../outside.txt", "content": "x"})
         assert result.success is False
-        assert result.error is not None
+        assert result.error == "path out of bounds"
 
     def test_pathguard_blocks_out_of_bounds_read(self, tmp_workspace):
         read_tool = ReadFileTool(target_directory=tmp_workspace)
         result = read_tool.execute({"path": "../outside.txt"})
         assert result.success is False
-        assert result.error is not None
+        assert result.error == "path out of bounds"
 
     def test_pathguard_blocks_out_of_bounds_list(self, tmp_workspace):
         list_tool = ListFilesTool(target_directory=tmp_workspace)
         result = list_tool.execute({"path": ".."})
         assert result.success is False
-        assert result.error is not None
+        assert result.error == "path out of bounds"
 
     def test_all_three_tools_are_tool_subclasses(self, tmp_workspace):
         assert issubclass(WriteFileTool, Tool)
@@ -461,8 +461,8 @@ class TestFileOpsIntegration:
     def test_all_three_tools_have_distinct_names(self, tmp_workspace):
         w = WriteFileTool(target_directory=tmp_workspace)
         r = ReadFileTool(target_directory=tmp_workspace)
-        l = ListFilesTool(target_directory=tmp_workspace)
-        names = {w.name, r.name, l.name}
+        lst = ListFilesTool(target_directory=tmp_workspace)
+        names = {w.name, r.name, lst.name}
         assert names == {"write_file", "read_file", "list_files"}
 
     def test_write_unicode_then_read_unicode_round_trip(self, tmp_workspace):
@@ -473,3 +473,99 @@ class TestFileOpsIntegration:
         result = read_tool.execute({"path": "unicode.txt"})
         assert result.success is True
         assert result.output["content"] == payload
+
+
+class TestFileOpsEdgeCases:
+    """Edge cases: non-string path, list-on-file, symlink rejection."""
+
+    def test_write_none_path_returns_boundary_error(self, tmp_workspace):
+        tool = WriteFileTool(target_directory=tmp_workspace)
+        result = tool.execute({"path": None, "content": "x"})
+        assert result.success is False
+        assert result.error == "path out of bounds"
+
+    def test_write_non_string_path_returns_boundary_error(self, tmp_workspace):
+        tool = WriteFileTool(target_directory=tmp_workspace)
+        result = tool.execute({"path": 123, "content": "x"})
+        assert result.success is False
+        assert result.error == "path out of bounds"
+
+    def test_read_none_path_returns_boundary_error(self, tmp_workspace):
+        tool = ReadFileTool(target_directory=tmp_workspace)
+        result = tool.execute({"path": None})
+        assert result.success is False
+        assert result.error == "path out of bounds"
+
+    def test_read_non_string_path_returns_boundary_error(self, tmp_workspace):
+        tool = ReadFileTool(target_directory=tmp_workspace)
+        result = tool.execute({"path": 42})
+        assert result.success is False
+        assert result.error == "path out of bounds"
+
+    def test_list_none_path_returns_boundary_error(self, tmp_workspace):
+        tool = ListFilesTool(target_directory=tmp_workspace)
+        result = tool.execute({"path": None})
+        assert result.success is False
+        assert result.error == "path out of bounds"
+
+    def test_list_non_string_path_returns_boundary_error(self, tmp_workspace):
+        tool = ListFilesTool(target_directory=tmp_workspace)
+        result = tool.execute({"path": 99})
+        assert result.success is False
+        assert result.error == "path out of bounds"
+
+    def test_list_on_file_path_returns_empty_lists(self, tmp_workspace):
+        """SPEC §3.2.3: path doesn't exist → return empty lists.
+        A file path is not a listable directory, so return empty."""
+        with open(os.path.join(tmp_workspace, "afile.txt"), "w") as f:
+            f.write("data")
+        tool = ListFilesTool(target_directory=tmp_workspace)
+        result = tool.execute({"path": "afile.txt"})
+        assert result.success is True
+        assert result.output["files"] == []
+        assert result.output["dirs"] == []
+
+    def test_write_missing_path_key_returns_boundary_error(self, tmp_workspace):
+        tool = WriteFileTool(target_directory=tmp_workspace)
+        result = tool.execute({"content": "x"})
+        assert result.success is False
+        assert result.error == "path out of bounds"
+
+    def test_read_missing_path_key_returns_boundary_error(self, tmp_workspace):
+        tool = ReadFileTool(target_directory=tmp_workspace)
+        result = tool.execute({})
+        assert result.success is False
+        assert result.error == "path out of bounds"
+
+    @pytest.mark.skipif(
+        not hasattr(os, "symlink"),
+        reason="Platform does not support symlinks",
+    )
+    def test_write_symlink_rejected_by_no_follow(self, tmp_workspace):
+        """O_NOFOLLOW prevents writing through a symlink inside the target."""
+        target = os.path.join(tmp_workspace, "real.txt")
+        with open(target, "w", encoding="utf-8") as f:
+            f.write("real")
+        link = os.path.join(tmp_workspace, "link.txt")
+        os.symlink(target, link)
+        tool = WriteFileTool(target_directory=tmp_workspace)
+        result = tool.execute({"path": "link.txt", "content": "hijack"})
+        assert result.success is False
+        # The real file must not be modified
+        with open(target, encoding="utf-8") as f:
+            assert f.read() == "real"
+
+    @pytest.mark.skipif(
+        not hasattr(os, "symlink"),
+        reason="Platform does not support symlinks",
+    )
+    def test_read_symlink_rejected_by_no_follow(self, tmp_workspace):
+        """O_NOFOLLOW prevents reading through a symlink inside the target."""
+        target = os.path.join(tmp_workspace, "real.txt")
+        with open(target, "w", encoding="utf-8") as f:
+            f.write("secret")
+        link = os.path.join(tmp_workspace, "link.txt")
+        os.symlink(target, link)
+        tool = ReadFileTool(target_directory=tmp_workspace)
+        result = tool.execute({"path": "link.txt"})
+        assert result.success is False
