@@ -8,6 +8,37 @@ from harness.governance.command_guard import CommandGuard
 from harness.models import GuardResult
 from harness.tools.base import Tool, ToolResult
 
+_TIMEOUT_ERROR = "command timeout"
+_TEST_TIMEOUT_ERROR = "test execution timeout"
+_REPORT_NOT_CREATED = "report.json not created"
+
+
+def _run_shell(
+    command: str,
+    cwd: str,
+    timeout: int,
+    timeout_error: str,
+) -> subprocess.CompletedProcess[str] | ToolResult:
+    """Run *command* via the shell in *cwd* with a *timeout*.
+
+    Returns either a :class:`subprocess.CompletedProcess` on success or a
+    failing :class:`ToolResult` (timeout / OS error).  This helper
+    centralises ``subprocess.run`` error handling for both shell tools.
+    """
+    try:
+        return subprocess.run(
+            command,
+            shell=True,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return ToolResult(success=False, output={}, error=timeout_error)
+    except OSError as e:
+        return ToolResult(success=False, output={}, error=str(e))
+
 
 class RunCommandTool(Tool):
     """Tool for executing shell commands with CommandGuard protection."""
@@ -51,27 +82,17 @@ class RunCommandTool(Tool):
                 output={"status": GuardResult.PENDING.value},
                 error="command requires approval",
             )
-        try:
-            proc = subprocess.run(
-                cmd,
-                shell=True,
-                cwd=self._target_directory,
-                capture_output=True,
-                text=True,
-                timeout=self._timeout,
-            )
-        except subprocess.TimeoutExpired:
-            return ToolResult(
-                success=False,
-                output={},
-                error="command timeout",
-            )
+        result = _run_shell(
+            cmd, self._target_directory, self._timeout, _TIMEOUT_ERROR
+        )
+        if isinstance(result, ToolResult):
+            return result
         return ToolResult(
             success=True,
             output={
-                "stdout": proc.stdout,
-                "stderr": proc.stderr,
-                "exit_code": proc.returncode,
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+                "exit_code": result.returncode,
             },
         )
 
@@ -108,22 +129,24 @@ class RunTestsTool(Tool):
             os.makedirs(harness_dir, exist_ok=True)
         except OSError as e:
             return ToolResult(success=False, output={}, error=str(e))
-        try:
-            subprocess.run(
-                self._test_command,
-                shell=True,
-                cwd=self._target_directory,
-                capture_output=True,
-                text=True,
-                timeout=self._pytest_timeout,
-            )
-        except subprocess.TimeoutExpired:
+        result = _run_shell(
+            self._test_command,
+            self._target_directory,
+            self._pytest_timeout,
+            _TEST_TIMEOUT_ERROR,
+        )
+        if isinstance(result, ToolResult):
+            return result
+        if not os.path.isfile(report_path):
             return ToolResult(
                 success=False,
-                output={},
-                error="test execution timeout",
+                output={"exit_code": result.returncode},
+                error=_REPORT_NOT_CREATED,
             )
         return ToolResult(
             success=True,
-            output={"report_path": report_path},
+            output={
+                "report_path": report_path,
+                "exit_code": result.returncode,
+            },
         )

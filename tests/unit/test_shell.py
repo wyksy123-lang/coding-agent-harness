@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import os
 
-from harness.tools.shell import RunCommandTool, RunTestsTool
-
 from harness.models import Config, GuardResult
 from harness.tools.base import Tool, ToolResult
+from harness.tools.shell import RunCommandTool, RunTestsTool
 
 WORKING_TEST_COMMAND = (
     "python3 -m pytest --json-report --json-report-file=.harness/report.json"
@@ -650,3 +649,101 @@ class TestRunTestsToolTimeout:
         assert result.success is False
         assert result.error is not None
         assert "timeout" in result.error.lower()
+
+
+# ---------------------------------------------------------------------------
+# RunTestsTool — report.json creation verification (CQ-4.1 Major fix)
+# ---------------------------------------------------------------------------
+
+
+class TestRunTestsToolReportCreation:
+    """SPEC §3.2.4: pytest crash → report.json may not be created."""
+
+    def test_invalid_command_returns_error_not_created(self, tmp_workspace):
+        """When test_command is invalid, report.json is not created."""
+        tool = RunTestsTool(
+            target_directory=tmp_workspace,
+            test_command="nonexistent-command-xyz",
+            pytest_timeout=30,
+        )
+        result = tool.execute({})
+        assert isinstance(result, ToolResult)
+        assert result.success is False
+        assert result.error is not None
+        assert "not created" in result.error.lower()
+
+    def test_missing_report_returns_exit_code(self, tmp_workspace):
+        """When report.json is missing, output should contain exit_code."""
+        tool = RunTestsTool(
+            target_directory=tmp_workspace,
+            test_command="nonexistent-command-xyz",
+            pytest_timeout=30,
+        )
+        result = tool.execute({})
+        assert result.success is False
+        assert "exit_code" in result.output
+
+    def test_valid_run_includes_exit_code(self, tmp_workspace):
+        """When tests run successfully, output should include exit_code."""
+        _write_passing_test(tmp_workspace)
+        config = _shell_config()
+        tool = RunTestsTool(
+            target_directory=tmp_workspace,
+            test_command=config.test_command,
+            pytest_timeout=config.pytest_timeout,
+        )
+        result = tool.execute({})
+        assert result.success is True
+        assert "exit_code" in result.output
+        assert result.output["exit_code"] == 0
+
+
+# ---------------------------------------------------------------------------
+# RunCommandTool — OSError handling (CQ-4.2 Minor fix)
+# ---------------------------------------------------------------------------
+
+
+class TestRunCommandToolOSError:
+    """Verify that OSError (e.g. non-existent cwd) is handled gracefully."""
+
+    def test_nonexistent_target_directory_returns_error(self):
+        """CommandGuard passes but subprocess raises FileNotFoundError."""
+        tool = RunCommandTool(
+            target_directory="/nonexistent/dir/xyz",
+            dangerous_command_patterns=[],
+            timeout=5,
+        )
+        result = tool.execute({"cmd": "echo hello"})
+        assert isinstance(result, ToolResult)
+        assert result.success is False
+        assert result.error is not None
+
+    def test_nonexistent_target_directory_returns_str_error(self):
+        """Error message should be a string, not an exception."""
+        tool = RunCommandTool(
+            target_directory="/nonexistent/dir/xyz",
+            dangerous_command_patterns=[],
+            timeout=5,
+        )
+        result = tool.execute({"cmd": "echo hello"})
+        assert isinstance(result.error, str)
+
+
+# ---------------------------------------------------------------------------
+# RunTestsTool — OSError handling (CQ-4.2 Minor fix)
+# ---------------------------------------------------------------------------
+
+
+class TestRunTestsToolOSError:
+    """Verify that OSError from non-existent target_directory is handled."""
+
+    def test_nonexistent_target_directory_returns_error(self):
+        tool = RunTestsTool(
+            target_directory="/nonexistent/dir/xyz",
+            test_command=WORKING_TEST_COMMAND,
+            pytest_timeout=30,
+        )
+        result = tool.execute({})
+        assert isinstance(result, ToolResult)
+        assert result.success is False
+        assert result.error is not None
