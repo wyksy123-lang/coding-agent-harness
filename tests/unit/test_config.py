@@ -7,7 +7,6 @@ import pytest
 from harness.config.loader import ConfigError, ConfigLoader
 from harness.models import Config
 
-
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
@@ -230,6 +229,50 @@ class TestConfigLoaderTypeValidation:
         path = _write_yaml(tmp_path / "harness.yaml", yaml_content)
         with pytest.raises(ConfigError):
             ConfigLoader.load(str(path))
+
+    def test_bool_for_int_field_raises_config_error(self, tmp_path):
+        path = _write_yaml(tmp_path / "harness.yaml", "max_rounds: true\n")
+        with pytest.raises(ConfigError):
+            ConfigLoader.load(str(path))
+
+    def test_bool_for_float_field_raises_config_error(self, tmp_path):
+        path = _write_yaml(tmp_path / "harness.yaml", "temperature: true\n")
+        with pytest.raises(ConfigError):
+            ConfigLoader.load(str(path))
+
+    def test_null_value_for_int_field_raises_config_error(self, tmp_path):
+        path = _write_yaml(tmp_path / "harness.yaml", "max_rounds: null\n")
+        with pytest.raises(ConfigError):
+            ConfigLoader.load(str(path))
+
+
+class TestConfigLoaderNonDictRoot:
+    def test_list_root_raises_config_error(self, tmp_path):
+        path = _write_yaml(tmp_path / "harness.yaml", "- a\n- b\n")
+        with pytest.raises(ConfigError):
+            ConfigLoader.load(str(path))
+
+    def test_scalar_root_raises_config_error(self, tmp_path):
+        path = _write_yaml(tmp_path / "harness.yaml", "42\n")
+        with pytest.raises(ConfigError):
+            ConfigLoader.load(str(path))
+
+
+class TestConfigLoaderCoercionAndIsolation:
+    def test_int_temperature_coerced_to_float(self, tmp_path):
+        path = _write_yaml(tmp_path / "harness.yaml", "temperature: 1\n")
+        config = ConfigLoader.load(str(path))
+        assert isinstance(config.temperature, float)
+        assert config.temperature == 1.0
+
+    def test_list_values_are_copied_not_aliased(self, tmp_path):
+        yaml_content = "enabled_tools:\n  - write_file\n  - read_file\n"
+        path = _write_yaml(tmp_path / "harness.yaml", yaml_content)
+        config = ConfigLoader.load(str(path))
+        config.enabled_tools.append("run_tests")
+        # Re-load to verify the original was not mutated
+        config2 = ConfigLoader.load(str(path))
+        assert "run_tests" not in config2.enabled_tools
 
 
 class TestConfigLoaderFieldTypes:

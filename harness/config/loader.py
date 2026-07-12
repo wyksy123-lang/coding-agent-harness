@@ -38,14 +38,23 @@ _VALID_FIELDS = _INT_FIELDS | _FLOAT_FIELDS | _STR_FIELDS | _STR_LIST_FIELDS
 
 
 class ConfigLoader:
+    """Loads and validates a YAML configuration file into a :class:`Config` object."""
+
     @staticmethod
     def load(path: str | Path) -> Config:
+        """Parse *path* as YAML, validate field types, and return a ``Config``.
+
+        Missing fields are filled with defaults; unknown fields are ignored.
+        Any I/O or parse error is wrapped in :class:`ConfigError`.
+        """
         path = Path(path)
         try:
             with open(path, encoding="utf-8") as f:
                 raw = yaml.safe_load(f)
         except FileNotFoundError as e:
             raise ConfigError(f"Config file not found: {path}") from e
+        except OSError as e:
+            raise ConfigError(f"Cannot read config file {path}: {e}") from e
         except yaml.YAMLError as e:
             raise ConfigError(f"YAML parse error in {path}: {e}") from e
 
