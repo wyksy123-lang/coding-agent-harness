@@ -644,3 +644,181 @@
 1. ABC + dataclass 模块的 TDD 可以非常简洁——39 行实现 + 233 行测试，Red→Green 过程顺畅，无 Critical/Major 问题。
 2. Code Quality Review 的 Minor 问题多为设计选择（str vs enum、参数默认值、类型精度）——在 ABC 抽象层阶段保留灵活性是合理的，具体约束可在子类（T04 MockLLMClient、T05 DeepSeekClient）中实现。
 3. mutable-default 隔离测试（`field(default_factory=list)`）是 dataclass 测试的重要模式——T01 已建立此模式，T03 继承使用，验证了跨 task 的一致性。
+
+---
+
+## LOG-012 — TASK-04 Red 阶段
+
+**时间戳**：2026-07-12
+
+**Task 编号**：TASK-04（MockLLMClient）
+
+**触发的 Superpowers 技能**：
+- `subagent-driven-development`
+- `test-driven-development`
+
+**subagent 信息**：
+- 类型：`general`
+- Task ID：`ses_0aa9a8bb7ffeLeJebDIiqnTS5g`
+- 关键 prompt：仅编写 `tests/unit/test_llm_mock.py` 失败测试，不写任何实现代码
+
+**subagent 执行内容**：
+1. 编写 `tests/unit/test_llm_mock.py`（255 行，28 个测试，6 个测试类）
+   - TestMockLLMClientConstruction（4 个测试）：验证构造、issubclass(LLMClient)、isinstance、空列表构造
+   - TestMockLLMClientReturnsResponsesInOrder（5 个测试）：验证首次/二次/三次调用顺序、含 tool_calls 的响应
+   - TestMockLLMClientExhaustion（2 个测试）：验证耗尽后抛 StopIteration、单响应首次成功二次抛异常
+   - TestMockLLMClientFromToolCalls（6 个测试）：验证 from_tool_calls 构造、tool_calls 正确性、默认值、空列表、多 tool_calls、数量正确
+   - TestMockLLMClientRecordsCalls（6 个测试）：验证 recorded_calls 初始空、messages/tools 记录、多调用顺序、匹配
+   - TestMockLLMClientEdgeCases（5 个测试）：验证空列表首次调用抛异常、OpenAI 格式消息、mutable default 隔离、返回类型、from_tool_calls 空列表
+
+**Red 阶段验证**：
+- 命令：`pytest tests/unit/test_llm_mock.py -v`
+- 退出状态码：`2`（collection error）
+- 关键失败原因：
+  ```
+  ModuleNotFoundError: No module named 'harness.llm.mock'
+  ```
+- 结果：0 collected, 1 error
+- 失败原因确认：`harness/llm/mock.py` 尚未创建，测试因导入目标模块不存在而失败。测试文件本身语法正确，导入语句合法，断言全面。**不是语法错误、环境错误或测试本身错误。**
+
+**人工干预**：无
+
+**Commit hash**：`db70b60` (test(T04): add failing tests)
+
+**教训**：—
+
+---
+
+## LOG-013 — TASK-04 Green 阶段
+
+**时间戳**：2026-07-12
+
+**Task 编号**：TASK-04（MockLLMClient）
+
+**触发的 Superpowers 技能**：
+- `subagent-driven-development`
+- `test-driven-development`
+
+**subagent 信息**：
+- 类型：`general`
+- Task ID：`ses_0aa8de5a0ffe487ZebiMfTQ7N7`
+- 关键 prompt：仅实现让 `tests/unit/test_llm_mock.py` 通过的最少代码
+
+**subagent 执行内容**：
+1. 创建 `harness/llm/mock.py`（49 行）：
+   - `RecordedCall` dataclass: `messages: list[dict[str, Any]]`, `tools: list[dict[str, Any]]`
+   - `MockLLMClient(LLMClient)`: 继承 LLMClient ABC
+     - `__init__(responses)`: 复制输入列表（mutable default 隔离），初始化 `_index=0` 和 `recorded_calls=[]`
+     - `chat(messages, tools) -> LLMResponse`: 记录调用 → 检查耗尽 → 返回下一个响应 → 递增索引
+     - `from_tool_calls(tool_call_lists) -> MockLLMClient`: classmethod，从 tool call 列表构造 LLMResponse 序列
+
+**Green 阶段验证**：
+- 命令：`pytest tests/unit/test_llm_mock.py -v`
+- 退出状态码：`0`
+- 结果：**28 passed** in 0.02s
+- 从 Red 到 Green：`ModuleNotFoundError` → 全部 28 个测试通过
+- 回归检查：`pytest tests/ -v` 同样 147 passed，无回归
+
+**人工干预**：无
+
+**Commit hash**：`cba9cd1` (feat(T04): implement minimal green solution)
+
+**教训**：—
+
+---
+
+## LOG-014 — TASK-04 Refactor + 两阶段评审 + 最终验证
+
+**时间戳**：2026-07-12
+
+**Task 编号**：TASK-04（MockLLMClient）
+
+**触发的 Superpowers 技能**：
+- `test-driven-development`（重构阶段）
+- `subagent-driven-development`（Code Quality Review subagent）
+
+### Refactor 阶段
+
+**执行内容**：
+1. 修复 ruff F401：移除未使用的 `field` 导入
+2. 添加完整 docstring：`RecordedCall`、`MockLLMClient` 类、`__init__`、`chat`、`from_tool_calls` 方法
+3. 修复 Code Quality Review 发现的 Minor 问题：
+   - CQ-2：`recorded_calls` 存储引用而非拷贝 → 改为 `list(messages)` 和 `list(tools)` 拷贝
+   - CQ-3：添加 `test_call_recorded_even_when_exhausted` 测试
+   - CQ-4：添加 `test_recorded_messages_isolated_from_caller_mutations` 测试
+   - CQ-4：添加 `test_recorded_tools_isolated_from_caller_mutations` 测试
+
+**验证**：`pytest tests/unit/test_llm_mock.py -v` → 31 passed（从 28 增至 31）
+
+### 第一阶段：Specification Compliance Review
+
+**对照**：SPEC.md §5.1（组件图）、§5.3（外部依赖）、§8（技术选型）、§9.6（机制编码）、§10.2（AC12）、PLAN.md T04
+
+**发现 Critical 问题及修复**：无 Critical 问题
+
+**检查结果**：
+
+| 检查项 | 结果 |
+|---|---|
+| MockLLMClient(responses) 构造函数 | ✅ 符合 |
+| 按顺序返回预设响应 | ✅ 符合 |
+| 耗尽后抛异常（StopIteration） | ✅ 符合 |
+| from_tool_calls 便捷构造 | ✅ 符合 |
+| 记录 messages 和 tools | ✅ 符合 |
+| 继承 LLMClient ABC | ✅ 符合 |
+| 无越界实现（未实现 T05+） | ✅ 符合 |
+| 无真实网络/LLM 依赖 | ✅ 符合 |
+
+**越界实现检查**：无越界（未实现 T05 DeepSeekClient 或其他 task 的功能）
+
+### 第二阶段：Code Quality Review
+
+**subagent 信息**：
+- 类型：`general`（reviewer 角色）
+- Task ID：`ses_0aa8ae52fffem2Czot2c2rMoFO`
+- 关键 prompt：审查 T04 代码质量，检查 8 项标准
+
+**审查结果摘要**：
+
+| # | 标准 | 判定 | 严重度 |
+|---|---|---|---|
+| 1 | 职责划分 | PASS | — |
+| 2 | 可读性 | PASS | — |
+| 3 | 接口和类型 | PASS | — |
+| 4 | 错误处理 | WARN | Minor（StopIteration PEP 479 gotcha） |
+| 5 | 安全边界 | WARN | Minor（recorded_calls 引用存储 → 已修复） |
+| 6 | 测试质量 | WARN | Minor（缺少耗尽记录/隔离测试 → 已修复） |
+| 7 | 可维护性 | PASS | — |
+| 8 | 无真实网络/LLM 依赖 | PASS | — |
+
+**修复的 Minor 问题**：
+
+| # | 问题 | 严重度 | 修复 |
+|---|---|---|---|
+| CQ-1 | `field` 导入未使用 | Minor | 移除未使用导入 |
+| CQ-2 | `recorded_calls` 存储引用而非拷贝 | Minor | 改为 `list(messages)` 和 `list(tools)` |
+| CQ-3 | 缺少耗尽时仍记录调用的测试 | Minor | 添加 `test_call_recorded_even_when_exhausted` |
+| CQ-4 | 缺少 recorded_calls 隔离测试 | Minor | 添加 2 个隔离测试 |
+
+**未修复（合理保留）**：
+- StopIteration PEP 479 gotcha：仅在 generator 上下文中会触发 RuntimeError，AgentLoop 将使用常规 while 循环，不受影响。测试已定义 StopIteration 为契约，保留一致性。
+
+### 最终验证
+
+| 检查项 | 命令 | 结果 |
+|---|---|---|
+| 目标测试 | `pytest tests/unit/test_llm_mock.py -v` | **31 passed** in 0.02s |
+| 完整测试套件 | `pytest tests/ -v` | **150 passed** in 0.12s |
+| Lint | `ruff check harness/ tests/` | All checks passed! |
+| 类型检查 | `mypy harness/` | Success: no issues found in 7 source files |
+| 凭据泄露检查 | `grep -rni "api_key\|secret\|password\|token\|sk-" harness/llm/ tests/unit/test_llm_mock.py` | 无匹配（源码无凭据） |
+| Git 历史扫描 | `git log --all -p \| grep -i "api_key\|secret\|password"` | 仅文档引用（PLAN/SPEC/AGENT_LOG 中概念性提及），无真实凭据 |
+
+**Commit hash**：`8e57cad` (refactor(T04): complete reviews and verification)
+
+**人工干预**：无
+
+**教训**：
+1. MockLLMClient 的实现非常简洁（90 行实现 + 283 行测试），Red→Green 过程顺畅，无 Critical/Major 问题——这得益于 T03 ABC 抽象层定义的清晰契约。
+2. Code Quality Review 发现的 Minor 问题（recorded_calls 引用存储）是一个典型的"测试驱动开发可能遗漏的边缘情况"——测试验证了记录的内容正确，但未验证记录的独立性。在 review 阶段补充隔离测试是必要的。
+3. StopIteration 作为耗尽异常是一个设计选择——PEP 479 的风险仅在 generator 上下文中存在，而 AgentLoop 将使用常规循环。保留 StopIteration 与测试契约一致，避免不必要的范围扩大。
