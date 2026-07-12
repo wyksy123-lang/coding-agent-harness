@@ -1562,3 +1562,199 @@
 2. 非字符串 path 的 TypeError 是 Python 类型系统边缘情况的典型案例——`args.get("path", "")` 在 key 存在但值为 None 时返回 None 而非 ""，导致 `os.path.isabs(None)` 抛 TypeError。`isinstance` 检查是防御非字符串输入的标准方法。
 3. O_NOFOLLOW 的实现需要 `os.open` + `os.fdopen` 而非内置 `open()`——这是 Python 文件操作中防止 symlink 攻击的标准模式。`os.fdopen` 接管 fd 所有权后，`with` 语句会正确关闭它。
 4. 恒真断言（`assert tool is not None`）和模糊错误检查（`assert result.error is not None`）是测试质量的典型陷阱——Code Quality Review 应检查每个 assert 是否真正验证了预期行为和具体值。
+
+---
+
+## LOG-027 — TASK-10 Red 阶段
+
+**时间戳**：2026-07-12
+
+**Task 编号**：TASK-10（CommandGuard 危险命令检测）
+
+**触发的 Superpowers 技能**：
+- `subagent-driven-development`
+- `test-driven-development`
+
+**subagent 信息**：
+- 类型：`general`
+- Task ID：`ses_0a9b9975dffeO17VPyUtZNVF8T`
+- 关键 prompt：仅编写 `tests/unit/test_command_guard.py` 失败测试，不写任何实现代码
+
+**subagent 执行内容**：
+1. 编写 `tests/unit/test_command_guard.py`（516 行，92 个测试，17 个测试类）
+   - TestCommandGuardExistence（3 个测试）：验证 CommandGuard 是类、有 check 方法、check 可调用
+   - TestCommandGuardRmRf（5 个测试）：验证 `rm -rf` 各种形式 → PENDING
+   - TestCommandGuardGitPush（4 个测试）：验证 `git push` 各种形式 → PENDING
+   - TestCommandGuardSudo（3 个测试）：验证 `sudo` 各种形式 → PENDING
+   - TestCommandGuardCurlWget（4 个测试）：验证 `curl`/`wget` → PENDING
+   - TestCommandGuardDocker（4 个测试）：验证 `docker` → PENDING
+   - TestCommandGuardSafeCommands（16 个测试）：验证安全命令 → ALLOW
+   - TestCommandGuardPartialMatches（6 个测试）：验证复合命令中的危险模式检测
+   - TestCommandGuardInvalidRegex（7 个测试）：验证无效正则跳过不崩溃
+   - TestCommandGuardEmptyInputs（3 个测试）：验证空输入 → ALLOW
+   - TestCommandGuardNoneInputs（3 个测试）：验证 None 输入 → ALLOW
+   - TestCommandGuardNonStringInputs（5 个测试）：验证非字符串输入防御性处理
+   - TestCommandGuardMultipleMatches（3 个测试）：验证多模式匹配 → PENDING
+   - TestCommandGuardCaseSensitivity（6 个测试）：验证大小写敏感
+   - TestCommandGuardSimilarButNoMatch（8 个测试）：验证相似但不匹配的命令 → ALLOW
+   - TestCommandGuardDefaultPatternsFromConfig（9 个测试）：验证 Config 默认 patterns
+   - TestCommandGuardReturnType（3 个测试）：验证返回 GuardResult 枚举
+
+**Red 阶段验证**：
+- 命令：`pytest tests/unit/test_command_guard.py -v`
+- 退出状态码：`2`（collection error）
+- 关键失败原因：
+  ```
+  ModuleNotFoundError: No module named 'harness.governance.command_guard'
+  ```
+- 结果：0 collected, 1 error
+- 失败原因确认：`harness/governance/command_guard.py` 尚未创建，测试因导入目标模块不存在而失败。测试文件本身语法正确，导入语句合法，断言全面。**不是语法错误、环境错误或测试本身错误。**
+
+**人工干预**：无
+
+**Commit hash**：`4bdfcfe` (test(T10): add failing tests for CommandGuard)
+
+**教训**：—
+
+---
+
+## LOG-028 — TASK-10 Green 阶段
+
+**时间戳**：2026-07-12
+
+**Task 编号**：TASK-10（CommandGuard 危险命令检测）
+
+**触发的 Superpowers 技能**：
+- `subagent-driven-development`
+- `test-driven-development`
+
+**subagent 信息**：
+- 类型：`general`
+- Task ID：`ses_0a9ae9ad8ffe3H3nnj1en4dmMb`
+- 关键 prompt：仅实现让 `tests/unit/test_command_guard.py` 通过的最少代码
+
+**subagent 执行内容**：
+1. 创建 `harness/governance/command_guard.py`（28 行）：
+   - `CommandGuard` 类：`@staticmethod check(cmd, patterns) -> GuardResult`
+   - 非字符串 cmd → ALLOW；非列表 patterns → ALLOW
+   - 逐条遍历 patterns：非字符串元素跳过；`re.compile` 失败跳过；`compiled.search(cmd)` 匹配 → PENDING
+   - 全部不匹配 → ALLOW
+2. 更新 `harness/governance/__init__.py`：添加 re-export `CommandGuard`
+
+**Green 阶段验证**：
+- 命令：`pytest tests/unit/test_command_guard.py -v`
+- 退出状态码：`0`
+- 结果：**92 passed** in 0.05s
+- 从 Red 到 Green：`ModuleNotFoundError` → 全部 92 个测试通过
+- 回归检查：`pytest tests/ -v` 同样 475 passed，无回归
+
+**人工干预**：无
+
+**Commit hash**：`308ed0b` (feat(T10): implement minimal green solution)
+
+**教训**：—
+
+---
+
+## LOG-029 — TASK-10 Refactor + 两阶段评审 + 最终验证
+
+**时间戳**：2026-07-12
+
+**Task 编号**：TASK-10（CommandGuard 危险命令检测）
+
+**触发的 Superpowers 技能**：
+- `test-driven-development`（重构阶段）
+- `subagent-driven-development`（Code Quality Review subagent）
+
+### Refactor 阶段
+
+**执行内容**：
+1. 添加详细 docstring（引用 SPEC §3.4.2），遵循 PathGuard 模式
+2. 精化类型标注：`Any` → `str` / `list[str]`（匹配 SPEC 签名），保留 `isinstance` 防御性检查
+3. 移除未使用的 `from typing import Any` 导入
+4. 修复 Code Quality Review 发现的 Minor 问题：
+   - CQ-3：移除 2 个重复测试（`test_rm_rf_in_compound_command_pending` 和 `test_sudo_in_middle_pending` 在 PartialMatches 类中与 RmRf/Sudo 类中重复），替换为差异化的测试（subshell 和 env var 场景）
+   - CQ-4：添加空字符串 pattern 测试（`""` 匹配所有命令 → PENDING）
+   - CQ-5：添加 tab/newline 命令测试（验证 `\s+` 覆盖）
+   - CQ-6：添加 regex 元字符命令测试（`.`, `*`, `[`, `]`）
+
+**验证**：`pytest tests/unit/test_command_guard.py -v` → 100 passed（从 92 增至 100）
+
+### 第一阶段：Specification Compliance Review
+
+**对照**：SPEC.md §3.4.2（CommandGuard）、§3.6.1（配置项 dangerous_command_patterns）、§9.2（危险动作）、§10.1 AC7（危险命令）、PLAN.md T10
+
+**发现 Critical 问题及修复**：无 Critical 问题
+
+**检查结果**：
+
+| 检查项 | 结果 |
+|---|---|
+| CommandGuard.check(cmd, patterns) -> GuardResult | ✅ 符合 |
+| 逐条正则匹配 → 命中 → PENDING；全部不命中 → ALLOW | ✅ 符合 |
+| 正则编译失败 → 跳过该条 | ✅ 符合 |
+| 输出 GuardResult.ALLOW 或 GuardResult.PENDING | ✅ 符合 |
+| 默认 patterns 与 SPEC §3.6.1 一致（5 个） | ✅ 符合 |
+| AC7: `rm -rf` 匹配 → PENDING | ✅ 符合 |
+| 无越界实现（未实现 T11 HITLState / T08 Shell 工具） | ✅ 符合 |
+| 无真实网络/LLM 依赖 | ✅ 符合 |
+
+**越界实现检查**：无越界（CommandGuard 仅实现命令模式匹配，不涉及 HITLState 或 Shell 工具）
+
+**Minor 观察**：PLAN T10 提到"正则编译失败 → 跳过该条并记录警告"，但 SPEC §3.4.2 仅要求"跳过该条"。实现遵循 SPEC，静默跳过无效正则。非 Critical 问题。
+
+### 第二阶段：Code Quality Review
+
+**subagent 信息**：
+- 类型：`general`（reviewer 角色）
+- Task ID：`ses_0a9a973c2fferekdg3WPn6hhvR`
+- 关键 prompt：审查 T10 代码质量，检查 8 项标准
+
+**审查结果摘要**：
+
+| # | 标准 | 判定 | 严重度 |
+|---|---|---|---|
+| 1 | 职责划分 | PASS | None |
+| 2 | 可读性 | PASS | None |
+| 3 | 接口和类型 | WARN | Minor（类型契约分歧：签名 str 但运行时接受 Any） |
+| 4 | 错误处理 | PASS | None（空字符串 pattern 行为已补测试） |
+| 5 | 安全边界 | WARN | Minor（fail-open 与 PathGuard 的 fail-closed 不一致） |
+| 6 | 测试质量 | WARN | Minor（2 个重复测试 → 已修复；缺少边缘测试 → 已修复） |
+| 7 | 可维护性 | PASS | None |
+| 8 | 无真实网络/LLM 依赖 | PASS | None |
+
+**修复的 Minor 问题**：
+
+| # | 问题 | 严重度 | 修复 |
+|---|---|---|---|
+| CQ-3 | 2 个重复测试（rm -rf compound 和 sudo compound） | Minor | 替换为差异化测试（subshell 和 env var 场景） |
+| CQ-4 | 缺少空字符串 pattern 测试 | Minor | 添加 3 个测试（空 pattern 匹配所有命令） |
+| CQ-5 | 缺少 tab/newline 命令测试 | Minor | 添加 2 个测试（验证 `\s+` 覆盖 tab 和 newline） |
+| CQ-6 | 缺少 regex 元字符命令测试 | Minor | 添加 3 个测试（`.`, `*`, `[`, `]` 在命令中） |
+
+**未修复（合理保留）**：
+- 类型契约分歧：签名 `str`/`list[str]` 但运行时接受 `Any`——防御性编程设计选择，测试用 `# type: ignore` 标注，合理保留
+- fail-open vs fail-closed：CommandGuard 对非字符串输入返回 ALLOW（fail-open），PathGuard 返回 DENY（fail-closed）——SPEC §3.4.2 定义"全部不命中 → ALLOW"，非字符串无法匹配任何 pattern 故 ALLOW 符合 SPEC 语义
+- `test_unclosed_character_class_raises_re_error` 测试 stdlib `re` 而非 CommandGuard——作为文档性测试保留，证明 `[invalid` 确实是无效正则
+- `re.compile` 每次调用重复编译——对每次 `run_command` 调用一次的 guard 来说性能影响可忽略
+
+### 最终验证
+
+| 检查项 | 命令 | 结果 |
+|---|---|---|
+| 目标测试 | `pytest tests/unit/test_command_guard.py -v` | **100 passed** in 0.08s |
+| 完整测试套件 | `pytest tests/ -v` | **483 passed** in 0.52s |
+| Lint | `ruff check harness/ tests/` | All checks passed! |
+| 类型检查 | `mypy harness/` | Success: no issues found in 14 source files |
+| 凭据泄露检查 | `grep -rni "api_key\|secret\|password\|token\|sk-" harness/governance/ tests/unit/test_command_guard.py` | 无匹配（源码无凭据） |
+| Git 历史扫描 | `git log --all -p \| grep -i "api_key\|secret\|password"` | 仅文档引用和测试 fixture，无真实凭据 |
+
+**Commit hash**：`e476d48` (refactor(T10): complete reviews and verification)
+
+**人工干预**：无
+
+**教训**：
+1. CommandGuard 是一个简洁的安全组件——39 行实现 + 540 行测试（100 个测试），TDD 红绿循环非常顺畅，无 Critical/Major 问题。这得益于 T01 中 `GuardResult` 枚举的清晰定义和 PathGuard 建立的模式。
+2. Code Quality Review 发现的重复测试是测试编写中的常见问题——当多个测试类从不同角度测试同一行为时（如 RmRf 类和 PartialMatches 类都测试 `rm -rf` 在复合命令中的匹配），容易出现完全相同的测试用例。Review 阶段应检查是否有完全重复的测试。
+3. 空字符串 pattern 是一个容易被忽略的边缘情况——`re.compile("")` 成功且 `"".search(cmd)` 匹配任何字符串（在位置 0），导致所有命令返回 PENDING。这是一个"正确但可能令人惊讶"的行为，值得有测试覆盖。
+4. fail-open vs fail-closed 的设计选择——CommandGuard 对非字符串输入返回 ALLOW（fail-open），而 PathGuard 返回 DENY（fail-closed）。这是因为两个 guard 的 SPEC 语义不同：CommandGuard 的"全部不命中 → ALLOW"意味着非字符串无法匹配任何 pattern 故 ALLOW；PathGuard 的"路径解析失败 → DENY"意味着任何解析问题都拒绝。两种设计都符合各自的 SPEC 语义。
