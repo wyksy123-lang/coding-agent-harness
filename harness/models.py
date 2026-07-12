@@ -148,3 +148,4 @@ class HITLRequest:
     status: HITLStatus
     timestamp: datetime
     decision: str
+    request_id: str = ""
