@@ -478,3 +478,169 @@
 1. ruff 导入排序规则（I001）在 Red 阶段测试文件中容易触发——应在 Green 阶段后立即运行 `ruff check --fix` 而非等到 Refactor 阶段。
 2. mypy strict 模式对第三方库（如 yaml）要求类型存根——当 `types-PyYAML` 无法安装时，`[[tool.mypy.overrides]]` + `ignore_missing_imports = true` 是干净的解决方案。
 3. Code Quality Review 发现的 8 个 Minor 测试覆盖缺口（bool 拒绝、非 dict root、类型强转、列表拷贝隔离）全部是代码已正确处理但测试未验证的边缘情况——说明 Red 阶段测试编写时应更积极地覆盖 Python 类型系统的边缘情况（bool 是 int 子类、None 值、YAML 非 dict root 等）。
+
+---
+
+## LOG-009 — TASK-03 Red 阶段
+
+**时间戳**：2026-07-12
+
+**Task 编号**：TASK-03（LLM 抽象层 LLMClient 协议）
+
+**触发的 Superpowers 技能**：
+- `subagent-driven-development`
+- `test-driven-development`
+
+**subagent 信息**：
+- 类型：`general`
+- Task ID：`ses_0aae41f2bffeqy4J6olq45yL7o`
+- 关键 prompt：仅编写 `tests/unit/test_llm_base.py` 失败测试，不写任何实现代码
+
+**subagent 执行内容**：
+1. 编写 `tests/unit/test_llm_base.py`（233 行，30 个测试，3 个测试类）
+   - TestToolCall（10 个测试）：验证实例化、dataclass、字段类型、空参数、复杂嵌套参数、相等/不等（id/name/arguments）、repr
+   - TestLLMResponse（12 个测试）：验证实例化、dataclass、字段类型、空 tool_calls、多个 tool_calls、默认空列表 + mutable-default 隔离、相等/不等（content/finish_reason/tool_calls）、repr
+   - TestLLMClientABC（8 个测试）：验证 isabstract、不可直接实例化、不完整子类不可实例化、完整子类可实例化、chat 签名含 messages+tools 参数、chat 返回 LLMResponse、chat 返回 tool_calls、chat 接受 OpenAI 格式消息
+
+**Red 阶段验证**：
+- 命令：`pytest tests/unit/test_llm_base.py -v`
+- 退出状态码：`2`（collection error）
+- 关键失败原因：
+  ```
+  ModuleNotFoundError: No module named 'harness.llm'
+  ```
+- 结果：0 collected, 1 error
+- 失败原因确认：`harness/llm/` 包尚未创建，测试因导入目标模块不存在而失败。测试文件本身语法正确，导入语句合法，断言全面。**不是语法错误、环境错误或测试本身错误。**
+
+**人工干预**：无
+
+**Commit hash**：`cda280a` (test(T03): add failing tests)
+
+**教训**：—
+
+---
+
+## LOG-010 — TASK-03 Green 阶段
+
+**时间戳**：2026-07-12
+
+**Task 编号**：TASK-03（LLM 抽象层 LLMClient 协议）
+
+**触发的 Superpowers 技能**：
+- `subagent-driven-development`
+- `test-driven-development`
+
+**subagent 信息**：
+- 类型：`general`
+- Task ID：`ses_0aad95b6cffevwCUMKZO3Y5qdU`
+- 关键 prompt：仅实现让 `tests/unit/test_llm_base.py` 通过的最少代码
+
+**subagent 执行内容**：
+1. 创建 `harness/llm/__init__.py`（空文件，包标记）
+2. 创建 `harness/llm/base.py`（39 行）：
+   - `ToolCall` dataclass: `id: str`, `name: str`, `arguments: dict[str, Any]`
+   - `LLMResponse` dataclass: `content: str`, `finish_reason: str`, `tool_calls: list[ToolCall]`（默认空列表 via `field(default_factory=list)`）
+   - `LLMClient` ABC: 抽象方法 `chat(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> LLMResponse`
+   - 使用 `from __future__ import annotations`、`abc.ABC`、`abc.abstractmethod`、`dataclass`、`field`
+   - 所有类和方法有 docstring
+
+**Green 阶段验证**：
+- 命令：`pytest tests/unit/test_llm_base.py -v`
+- 退出状态码：`0`
+- 结果：**30 passed** in 0.02s
+- 从 Red 到 Green：`ModuleNotFoundError` → 全部 30 个测试通过
+- 回归检查：`pytest tests/ -v` 同样 118 passed，无回归
+
+**人工干预**：无
+
+**Commit hash**：`fd04023` (feat(T03): implement minimal green solution)
+
+**教训**：—
+
+---
+
+## LOG-011 — TASK-03 Refactor + 两阶段评审 + 最终验证
+
+**时间戳**：2026-07-12
+
+**Task 编号**：TASK-03（LLM 抽象层 LLMClient 协议）
+
+**触发的 Superpowers 技能**：
+- `test-driven-development`（重构阶段）
+- `subagent-driven-development`（Code Quality Review subagent）
+
+### Refactor 阶段
+
+**执行内容**：
+1. 代码在 Green 阶段已非常简洁（39 行实现 + 233 行测试），无需实质性重构
+2. 添加 M3 Minor 测试改进：新增 `test_llm_response_completely_empty` 测试，验证 `content=""` + `tool_calls=[]` + `finish_reason="stop"` 共存的边缘情况
+
+**验证**：`pytest tests/unit/test_llm_base.py -v` → 31 passed（从 30 增至 31）
+
+### 第一阶段：Specification Compliance Review
+
+**对照**：SPEC.md §5.1（组件图）、§5.3（外部依赖）、§3.1（Agent 主循环）、§8（技术选型）、PLAN.md T03
+
+**发现 Critical 问题及修复**：无 Critical 问题
+
+**检查结果**：
+
+| 检查项 | 结果 |
+|---|---|
+| LLMClient 为 ABC | ✅ 符合 |
+| chat(messages, tools) -> LLMResponse 签名 | ✅ 符合 |
+| LLMResponse dataclass: content/tool_calls/finish_reason | ✅ 符合 |
+| ToolCall dataclass: id/name/arguments | ✅ 符合 |
+| OpenAI Chat Completions 格式兼容 | ✅ 符合 |
+| 无越界实现（未实现 T04/T05） | ✅ 符合 |
+
+**Minor 观察**：LLMResponse 字段顺序为 content, finish_reason, tool_calls（PLAN 列为 content, tool_calls, finish_reason），但因 tool_calls 有默认值必须后置——Python dataclass 规则要求，非 SPEC 违规。
+
+### 第二阶段：Code Quality Review
+
+**subagent 信息**：
+- 类型：`general`（reviewer 角色）
+- Task ID：`ses_0aad5af23ffefbwpgTn0iww6nY`
+- 关键 prompt：审查 T03 代码质量，检查 8 项标准
+
+**审查结果摘要**：
+
+| # | 标准 | 判定 | 严重度 |
+|---|---|---|---|
+| 1 | 职责划分 | PASS | — |
+| 2 | 可读性 | PASS | — |
+| 3 | 接口和类型 | PASS | —（3 个 Minor 设计选择） |
+| 4 | 错误处理 | PASS | —（ABC 模块，错误处理委托子类） |
+| 5 | 安全边界 | PASS | — |
+| 6 | 测试质量 | PASS | Minor（缺少完全空 LLMResponse 测试 → 已修复） |
+| 7 | 可维护性 | PASS | —（3 个 Minor 设计选择） |
+| 8 | 无真实网络/LLM 依赖 | PASS | — |
+
+**Minor 问题及处理**：
+
+| # | 问题 | 严重度 | 处理 |
+|---|---|---|---|
+| M1 | `finish_reason: str` vs StrEnum | Minor | 保留——str 更灵活，适配不同供应商 |
+| M2 | `tools` 参数无默认值 | Minor | 保留——coding agent 总是需要工具，设计合理 |
+| M3 | 缺少完全空 LLMResponse 测试 | Minor | **已修复**——新增 `test_llm_response_completely_empty` |
+| M4 | `list[dict[str, Any]]` 类型较松 | Minor | 保留——实用主义，匹配 OpenAI 格式处理惯例 |
+| M5 | `__init__.py` 为空 | Minor | 保留——与项目约定一致（所有 `__init__.py` 均为空） |
+
+### 最终验证
+
+| 检查项 | 命令 | 结果 |
+|---|---|---|
+| 完整测试套件 | `pytest tests/ -v` | **119 passed** in 0.08s |
+| Lint | `ruff check harness/ tests/` | All checks passed! |
+| 类型检查 | `mypy harness/` | Success: no issues found in 6 source files |
+| 凭据泄露检查 | `grep -rni "api_key\|secret\|password\|token\|sk-" harness/llm/ tests/unit/test_llm_base.py` | 无匹配（源码无凭据） |
+| Git 历史扫描 | `git log --all -p \| grep -i "api_key\|secret\|password"` | 仅文档引用（AGENT_LOG 中概念性提及），无真实凭据 |
+
+**Commit hash**：`f06b2a7` (refactor(T03): complete reviews and verification)
+
+**人工干预**：无
+
+**教训**：
+1. ABC + dataclass 模块的 TDD 可以非常简洁——39 行实现 + 233 行测试，Red→Green 过程顺畅，无 Critical/Major 问题。
+2. Code Quality Review 的 Minor 问题多为设计选择（str vs enum、参数默认值、类型精度）——在 ABC 抽象层阶段保留灵活性是合理的，具体约束可在子类（T04 MockLLMClient、T05 DeepSeekClient）中实现。
+3. mutable-default 隔离测试（`field(default_factory=list)`）是 dataclass 测试的重要模式——T01 已建立此模式，T03 继承使用，验证了跨 task 的一致性。
