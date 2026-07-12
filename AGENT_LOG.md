@@ -1365,3 +1365,200 @@
 2. TOCTOU 竞争是 check 式 guard 的固有局限——PathGuard 只能在调用时检查路径安全性，无法防止调用后符号链接被替换。这需要在工具层（T07 write_file/read_file）使用 `O_NOFOLLOW` 等机制补充，属于 T07 的职责范围。
 3. 42 行实现 + 220 行测试（38 个测试）——TDD 红绿循环非常顺畅，无 Critical/Major 问题。这得益于 T01 中 `GuardResult` 枚举的清晰定义和 conftest.py 中 `tmp_workspace` fixture 的复用。
 4. 符号链接测试使用 `platform.skipif` 正确处理了不支持符号链接的平台——这是跨平台测试的最佳实践。
+
+---
+
+## LOG-024 — TASK-07 Red 阶段
+
+**时间戳**：2026-07-12
+
+**Task 编号**：TASK-07（文件操作工具 WriteFileTool / ReadFileTool / ListFilesTool）
+
+**触发的 Superpowers 技能**：
+- `subagent-driven-development`
+- `test-driven-development`
+
+**subagent 信息**：
+- 类型：`general`
+- Task ID：`ses_0a9ee9262ffeeVmES5IIDZDWfu`
+- 关键 prompt：仅编写 `tests/unit/test_file_ops.py` 失败测试，不写任何实现代码
+
+**subagent 执行内容**：
+1. 编写 `tests/unit/test_file_ops.py`（475 行，66 个测试，10 个测试类）
+   - TestWriteFileToolConstruction（9 个测试）：验证构造、Tool 子类、name/schema 属性
+   - TestWriteFileToolWrites（7 个测试）：验证写入、持久化、覆盖、嵌套目录自动创建、空内容、Unicode
+   - TestWriteFileToolBoundary（6 个测试）：验证 `..` 穿越、绝对路径、子目录逃逸被拦截
+   - TestReadFileToolConstruction（8 个测试）：验证构造、Tool 子类、name/schema 属性
+   - TestReadFileToolReads（5 个测试）：验证读取已有文件、内容匹配、文件不存在、Unicode、空文件
+   - TestReadFileToolBoundary（4 个测试）：验证 `..` 穿越、绝对路径被拦截
+   - TestListFilesToolConstruction（7 个测试）：验证构造、Tool 子类、name/schema 属性
+   - TestListFilesToolLists（6 个测试）：验证空目录、文件列表、子目录列表、混合、嵌套、不存在路径
+   - TestListFilesToolBoundary（4 个测试）：验证 `..` 穿越、绝对路径被拦截
+   - TestFileOpsIntegration（10 个测试）：验证 write→read 往返、write→list、PathGuard 集成、Tool 子类、Unicode 往返
+
+**Red 阶段验证**：
+- 命令：`pytest tests/unit/test_file_ops.py -v`
+- 退出状态码：`2`（collection error）
+- 关键失败原因：
+  ```
+  ModuleNotFoundError: No module named 'harness.tools.file_ops'
+  ```
+- 结果：0 collected, 1 error
+- 失败原因确认：`harness/tools/file_ops.py` 尚未创建，测试因导入目标模块不存在而失败。测试文件本身语法正确，导入语句合法，断言全面。**不是语法错误、环境错误或测试本身错误。**
+
+**人工干预**：无
+
+**Commit hash**：`945b468` (test(T07): add failing tests)
+
+**教训**：—
+
+---
+
+## LOG-025 — TASK-07 Green 阶段
+
+**时间戳**：2026-07-12
+
+**Task 编号**：TASK-07（文件操作工具 WriteFileTool / ReadFileTool / ListFilesTool）
+
+**触发的 Superpowers 技能**：
+- `subagent-driven-development`
+- `test-driven-development`
+
+**subagent 信息**：
+- 类型：`general`
+- Task ID：`ses_0a9e8db77ffeEB0vFdbgVJO5Tr`
+- 关键 prompt：仅实现让 `tests/unit/test_file_ops.py` 通过的最少代码
+
+**subagent 执行内容**：
+1. 创建 `harness/tools/file_ops.py`（128 行）：
+   - `WriteFileTool(Tool)`：接收 path + content → PathGuard 检查 → 写文件 → 返回 ToolResult
+   - `ReadFileTool(Tool)`：接收 path → PathGuard 检查 → 读文件 → 返回 ToolResult
+   - `ListFilesTool(Tool)`：接收 path → PathGuard 检查 → 列目录 → 返回 ToolResult
+   - 每个工具在 PathGuard 检查前额外拒绝绝对路径（defense-in-depth）
+   - 目录不存在 → `os.makedirs(parent, exist_ok=True)` 自动创建
+   - 文件不存在 → 返回 `ToolResult(success=False, error="file not found")`
+   - 路径不存在 → 返回 `ToolResult(success=True, output={"files": [], "dirs": []})`
+
+**Green 阶段验证**：
+- 命令：`pytest tests/unit/test_file_ops.py -v`
+- 退出状态码：`0`
+- 结果：**66 passed** in 0.07s
+- 从 Red 到 Green：`ModuleNotFoundError` → 全部 66 个测试通过
+- 回归检查：`pytest tests/ -v` 同样 372 passed，无回归
+
+**人工干预**：无
+
+**Commit hash**：`b7edbc1` (feat(T07): implement minimal green solution)
+
+**教训**：—
+
+---
+
+## LOG-026 — TASK-07 Refactor + 两阶段评审 + 最终验证
+
+**时间戳**：2026-07-12
+
+**Task 编号**：TASK-07（文件操作工具 WriteFileTool / ReadFileTool / ListFilesTool）
+
+**触发的 Superpowers 技能**：
+- `test-driven-development`（重构阶段）
+- `subagent-driven-development`（Code Quality Review subagent）
+
+### Refactor 阶段
+
+**执行内容**：
+1. 修复 3 个 lint 问题：
+   - UP015：`open(full, "r", ...)` → `open(full, ...)`（移除不必要的 mode 参数）
+   - F401：移除未使用的 `pytest` 导入（Refactor 后因新增 skipif 测试又加回）
+   - E741：变量名 `l` → `lst`（消除歧义变量名）
+2. 在 `harness/tools/__init__.py` 添加 re-export `WriteFileTool`, `ReadFileTool`, `ListFilesTool`（遵循 T06 建立的模式）
+3. 修复 Code Quality Review 发现的 2 个 Major + 4 个 Minor 问题：
+   - CQ-1（Major）：非字符串 `path`（如 `None`）在 PathGuard 前引发未捕获 `TypeError` → 提取 `_resolve_safe_path()` 辅助函数，使用 `isinstance(path, str)` 检查
+   - CQ-2（Major）：缺少 `O_NOFOLLOW` → symlink TOCTOU 可逃逸沙箱（AGENT_LOG T09 明确标注为 T07 职责）→ write 使用 `os.open(O_WRONLY|O_CREAT|O_TRUNC|O_NOFOLLOW)`，read 使用 `os.open(O_RDONLY|O_NOFOLLOW)`
+   - CQ-3（Minor）：`assert tool is not None` 恒真断言 → 改为 `assert isinstance(tool, WriteFileTool)` 等
+   - CQ-4（Minor）：`assert result.error is not None` 不验证错误消息 → 改为 `assert result.error == "path out of bounds"`
+   - CQ-5（Minor）：缺少边缘情况测试 → 新增 11 个测试（None path、非字符串 path、list-on-file、missing path key、symlink O_NOFOLLOW 拒绝）
+   - CQ-6（Minor）：边界检查代码重复 6× → 提取 `_resolve_safe_path()` 辅助函数和 `_BOUNDARY_ERROR` 常量
+
+**验证**：`pytest tests/unit/test_file_ops.py -v` → 77 passed（从 66 增至 77）
+
+### 第一阶段：Specification Compliance Review
+
+**对照**：SPEC.md §3.2.1（write_file）、§3.2.2（read_file）、§3.2.3（list_files）、§3.4.1（PathGuard）、§9.2（危险动作）、§9.6（机制编码）、§10.1 AC6（路径围栏）、PLAN.md T07
+
+**发现 Critical 问题及修复**：无 Critical 问题
+
+**检查结果**：
+
+| 检查项 | 结果 |
+|---|---|
+| WriteFileTool: path + content → PathGuard → write → ToolResult | ✅ 符合 |
+| ReadFileTool: path → PathGuard → read → ToolResult | ✅ 符合 |
+| ListFilesTool: path → PathGuard → list → ToolResult | ✅ 符合 |
+| write_file output: {"success": True} / error | ✅ 符合 |
+| read_file output: {"content": "..."} / error | ✅ 符合 |
+| list_files output: {"files": [...], "dirs": [...]} | ✅ 符合 |
+| 路径越界 → PathGuard 拦截 | ✅ 符合 |
+| 目录不存在 → 自动创建（write_file） | ✅ 符合 |
+| 文件不存在 → 返回错误（read_file） | ✅ 符合 |
+| 路径不存在 → 返回空列表（list_files） | ✅ 符合 |
+| 无越界实现（未实现 T08+） | ✅ 符合 |
+| 无真实网络/LLM 依赖 | ✅ 符合 |
+
+**越界实现检查**：无越界（未实现 T08 Shell 工具或其他 task 的功能）
+
+### 第二阶段：Code Quality Review
+
+**subagent 信息**：
+- 类型：`general`（reviewer 角色）
+- Task ID：`ses_0a9e2c3bbffem7MFbkuLc0lz7P`
+- 关键 prompt：审查 T07 代码质量，检查 8 项标准
+
+**审查结果摘要**：
+
+| # | 标准 | 判定 | 严重度 |
+|---|---|---|---|
+| 1 | 职责划分 | PASS | None |
+| 2 | 可读性 | PASS | None |
+| 3 | 接口和类型 | PASS | None |
+| 4 | 错误处理 | WARN | Major（非字符串 path 引发 TypeError → 已修复） |
+| 5 | 安全边界 | WARN | Major（缺少 O_NOFOLLOW → 已修复） |
+| 6 | 测试质量 | WARN | Minor（恒真断言 + 不验证错误消息 → 已修复） |
+| 7 | 可维护性 | WARN | Minor（代码重复 → 已修复） |
+| 8 | 无真实网络/LLM 依赖 | PASS | None |
+
+**修复的问题**：
+
+| # | 问题 | 严重度 | 修复 |
+|---|---|---|---|
+| CQ-1 | 非字符串 `path`（如 `None`）在 PathGuard 前引发未捕获 `TypeError` | Major | 提取 `_resolve_safe_path()` 辅助函数，使用 `isinstance(path, str)` 检查 |
+| CQ-2 | 缺少 `O_NOFOLLOW` → symlink TOCTOU 可逃逸沙箱 | Major | write/read 使用 `os.open(... \| O_NOFOLLOW)` + `os.fdopen` |
+| CQ-3 | `assert tool is not None` 恒真断言 | Minor | 改为 `assert isinstance(tool, ...)` |
+| CQ-4 | `assert result.error is not None` 不验证错误消息 | Minor | 改为 `assert result.error == "path out of bounds"` |
+| CQ-5 | 缺少边缘情况测试 | Minor | 新增 11 个测试（None path、非字符串、list-on-file、symlink） |
+| CQ-6 | 边界检查代码重复 6× | Minor | 提取 `_resolve_safe_path()` + `_BOUNDARY_ERROR` 常量 |
+
+**未修复（合理保留）**：
+- TOCTOU 对中间目录符号链接：O_NOFOLLOW 仅保护最后一级组件，中间目录的符号链接仍可被跟随。PathGuard 的 `realpath` 已解析全部符号链接，TOCTOU 窗口极窄，SPEC 未要求完整 TOCTOU 保护。
+- `output={}` on error：与 ToolResult dataclass 设计一致（T06 建立），error 在 `ToolResult.error` 字段而非 output dict 中。
+
+### 最终验证
+
+| 检查项 | 命令 | 结果 |
+|---|---|---|
+| 目标测试 | `pytest tests/unit/test_file_ops.py -v` | **77 passed** in 0.11s |
+| 完整测试套件 | `pytest tests/ -v` | **383 passed** in 0.41s |
+| Lint | `ruff check harness/ tests/` | All checks passed! |
+| 类型检查 | `mypy harness/` | Success: no issues found in 13 source files |
+| 凭据泄露检查 | `grep -rni "api_key\|secret\|password\|token\|sk-" harness/tools/ tests/unit/test_file_ops.py` | 仅测试数据 `f.write("secret")`（非真实凭据） |
+| Git 历史扫描 | `git log --all -p \| grep -i "api_key\|secret\|password"` | 仅文档引用和测试 fixture，无真实凭据 |
+
+**Commit hash**：`a47072a` (refactor(T07): complete reviews and verification)
+
+**人工干预**：无
+
+**教训**：
+1. T09 AGENT_LOG 中明确标注的 O_NOFOLLOW 职责在 T07 Code Quality Review 中被正确识别并修复——跨 task 的 AGENT_LOG 记录对后续 task 的 review 有实际指导价值。
+2. 非字符串 path 的 TypeError 是 Python 类型系统边缘情况的典型案例——`args.get("path", "")` 在 key 存在但值为 None 时返回 None 而非 ""，导致 `os.path.isabs(None)` 抛 TypeError。`isinstance` 检查是防御非字符串输入的标准方法。
+3. O_NOFOLLOW 的实现需要 `os.open` + `os.fdopen` 而非内置 `open()`——这是 Python 文件操作中防止 symlink 攻击的标准模式。`os.fdopen` 接管 fd 所有权后，`with` 语句会正确关闭它。
+4. 恒真断言（`assert tool is not None`）和模糊错误检查（`assert result.error is not None`）是测试质量的典型陷阱——Code Quality Review 应检查每个 assert 是否真正验证了预期行为和具体值。
