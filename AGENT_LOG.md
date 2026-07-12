@@ -1944,3 +1944,198 @@
 2. `subprocess.run` 除了 `TimeoutExpired` 还可能抛出 `FileNotFoundError`（cwd 不存在）、`PermissionError` 等 `OSError` 子类——这些异常会穿透 `execute()` 方法违反 `Tool` 契约（应返回 `ToolResult` 而非抛异常）。提取 `_run_shell()` 共享辅助函数集中处理是最佳实践。
 3. 代码重复（`subprocess.run` + `TimeoutExpired` 在两个工具中重复）是提取共享辅助函数的信号——虽然只有 ~10 行重复，但集中错误处理可以一次性修复所有 `OSError` 未捕获问题。
 4. `RunTestsTool` 的 `exit_code` 字段虽然不是 SPEC 硬要求，但对调试和下游 T12 parser 有价值——当 report.json 未创建时，`exit_code` 可以帮助区分"pytest 崩溃"和"测试失败"两种场景。
+
+---
+
+## LOG-033 — TASK-11 Red 阶段
+
+**时间戳**：2026-07-12
+
+**Task 编号**：TASK-11（HITLState 人工审批状态机）
+
+**触发的 Superpowers 技能**：
+- `subagent-driven-development`
+- `test-driven-development`
+
+**subagent 信息**：
+- 类型：`general`
+- Task ID：`ses_0a9604ca1fferHEpPY7wbhupCz`
+- 关键 prompt：仅编写 `tests/unit/test_hitl.py` 失败测试，不写任何实现代码
+
+**subagent 执行内容**：
+1. 编写 `tests/unit/test_hitl.py`（546 行，78 个测试，9 个测试类）
+   - TestHITLStateExistence（11 个测试）：验证 HITLState 是类、有 create/approve/deny/check_timeout/get_pending 方法、所有方法可调用
+   - TestHITLStateCreate（14 个测试）：验证 create 返回 PENDING、timestamp 设置、action 存储、decision 空字符串、request_id 非空且唯一、timeout 存储
+   - TestHITLStateApprove（6 个测试）：验证 PENDING→APPROVED、decision 更新、action 保留、从 get_pending 移除
+   - TestHITLStateDeny（6 个测试）：验证 PENDING→DENIED、decision 更新、action 保留、从 get_pending 移除
+   - TestHITLStateCheckTimeout（8 个测试）：验证超时→TIMEOUT、未超时保持 PENDING、decision 更新、action 保留
+   - TestHITLStateGetPending（9 个测试）：验证初始空、返回列表、排除已解决、多个 pending
+   - TestHITLStateIllegalTransitions（9 个测试）：验证 approve/deny/check_timeout 在非 PENDING 状态抛 ValueError
+   - TestHITLStateUnknownId（5 个测试）：验证未知/空 request_id 抛 KeyError
+   - TestHITLStateEdgeCases（10 个测试）：验证 None action、实例独立性、ID 唯一性、零超时立即超时、大超时保持 pending、混合转换
+
+**设计决策（测试文件头部注释记录）**：
+1. `request_id`：现有 `HITLRequest` dataclass 无 `request_id` 字段，测试假设 Green subagent 添加该字段
+2. 异常类型：非法状态转换 → `ValueError`；未知 request_id → `KeyError`；None action → `(ValueError, TypeError)`（provisional）
+3. `decision` 字段：SPEC 未指定具体值，测试仅断言非空字符串
+4. 实例化使用：`HITLState()` 实例化，方法在实例上调用
+
+**Red 阶段验证**：
+- 命令：`pytest tests/unit/test_hitl.py -v`
+- 退出状态码：`2`（collection error）
+- 关键失败原因：
+  ```
+  ModuleNotFoundError: No module named 'harness.governance.hitl'
+  ```
+- 结果：0 collected, 1 error
+- 失败原因确认：`harness/governance/hitl.py` 尚未创建，测试因导入目标模块不存在而失败。测试文件本身语法正确（`py_compile` 通过），导入语句合法，断言全面。**不是语法错误、环境错误或测试本身错误。**
+
+**人工干预**：无
+
+**Commit hash**：`6142f32` (test(T11): add failing tests)
+
+**教训**：—
+
+---
+
+## LOG-034 — TASK-11 Green 阶段
+
+**时间戳**：2026-07-12
+
+**Task 编号**：TASK-11（HITLState 人工审批状态机）
+
+**触发的 Superpowers 技能**：
+- `subagent-driven-development`
+- `test-driven-development`
+
+**subagent 信息**：
+- 类型：`general`
+- Task ID：`ses_0a956e058ffe4kIXhdPEQsr30o`
+- 关键 prompt：仅实现让 `tests/unit/test_hitl.py` 通过的最少代码
+
+**subagent 执行内容**：
+1. 修改 `harness/models.py`（151 行）：在 `HITLRequest` dataclass 末尾添加 `request_id: str = ""` 字段（带默认值，向后兼容）
+2. 创建 `harness/governance/hitl.py`（110 行）：
+   - `HITLState` 类（实例化使用，非静态方法）
+   - `__init__`：初始化 `_requests: dict[str, HITLRequest]` 和 `_timeouts: dict[str, int]`
+   - `create(action, timeout) -> HITLRequest`：验证 action 非 None（ValueError）→ uuid4 生成 request_id → 创建 PENDING 请求 → 存储 → 返回
+   - `approve(request_id) -> HITLRequest`：KeyError 未知 ID → ValueError 非 PENDING → 设 APPROVED + decision="approved"
+   - `deny(request_id) -> HITLRequest`：KeyError 未知 ID → ValueError 非 PENDING → 设 DENIED + decision="denied"
+   - `check_timeout(request_id) -> HITLRequest`：KeyError 未知 ID → ValueError 非 PENDING → 比较 elapsed >= timeout → 设 TIMEOUT + decision="timeout"（或保持 PENDING）
+   - `get_pending() -> list[HITLRequest]`：返回所有 PENDING 请求的列表
+3. 更新 `harness/governance/__init__.py`：添加 re-export `HITLState`
+
+**Green 阶段验证**：
+- 命令：`pytest tests/unit/test_hitl.py -v`
+- 退出状态码：`0`
+- 结果：**78 passed** in 0.04s
+- 从 Red 到 Green：`ModuleNotFoundError` → 全部 78 个测试通过
+- 回归检查：`pytest tests/ -v` 同样 620 passed，无回归
+
+**人工干预**：无
+
+**Commit hash**：`1811c19` (feat(T11): implement minimal green solution)
+
+**教训**：—
+
+---
+
+## LOG-035 — TASK-11 Refactor + 两阶段评审 + 最终验证
+
+**时间戳**：2026-07-12
+
+**Task 编号**：TASK-11（HITLState 人工审批状态机）
+
+**触发的 Superpowers 技能**：
+- `test-driven-development`（重构阶段）
+- `subagent-driven-development`（Code Quality Review subagent）
+
+### Refactor 阶段
+
+**执行内容**：
+1. 修复 Code Quality Review 发现的 2 个 Minor 问题：
+   - CQ-2：`test_create_none_action_raises` 使用过宽异常匹配 `(ValueError, TypeError)` → 收紧为 `pytest.raises(ValueError, match="action")`
+   - CQ-3：缺少 `check_timeout("")` 空字符串 ID 测试 → 添加 `test_check_timeout_empty_string_id_raises_keyerror`
+2. 代码本身无需重构——实现已简洁（110 行实现 + 549 行测试），docstrings 完整，类型标注正确
+
+**验证**：`pytest tests/unit/test_hitl.py -v` → 79 passed（从 78 增至 79，新增 1 个测试 + 1 个收紧断言）
+
+### 第一阶段：Specification Compliance Review
+
+**对照**：SPEC.md §3.4.3（HITLState）、§6.1（ER 图 HITLRequest）、§6.2（字段约束）、§10.1 AC8（HITL 状态机）、PLAN.md T11
+
+**发现 Critical 问题及修复**：无 Critical 问题
+
+**检查结果**：
+
+| 检查项 | 结果 |
+|---|---|
+| HITLState.create(action, timeout) -> HITLRequest (PENDING) | ✅ 符合 |
+| HITLState.approve(request_id) -> HITLRequest (APPROVED) | ✅ 符合 |
+| HITLState.deny(request_id) -> HITLRequest (DENIED) | ✅ 符合 |
+| HITLState.check_timeout(request_id) -> HITLRequest (TIMEOUT) | ✅ 符合 |
+| HITLState.get_pending() -> List[HITLRequest] | ✅ 符合 |
+| 状态转换：PENDING → APPROVED/DENIED/TIMEOUT | ✅ 符合 |
+| 非法状态转换抛异常 | ✅ 符合（ValueError） |
+| 未知 request_id 抛异常 | ✅ 符合（KeyError） |
+| 超时 → 默认 DENIED 语义（status=TIMEOUT） | ✅ 符合 |
+| HITLRequest.status ∈ {PENDING, APPROVED, DENIED, TIMEOUT} | ✅ 符合 |
+| AC8: PENDING→APPROVED→执行；PENDING→DENIED→反馈 | ✅ 符合 |
+| 无越界实现（未实现 T12 parser / T15 injector / T18 agent loop） | ✅ 符合 |
+| 无真实网络/LLM 依赖 | ✅ 符合 |
+
+**越界实现检查**：无越界（HITLState 仅实现状态机，不涉及命令执行、测试解析或 agent 循环）
+
+### 第二阶段：Code Quality Review
+
+**subagent 信息**：
+- 类型：`general`（reviewer 角色）
+- Task ID：`ses_0a9505516ffevhle2n65JFA5jZ`
+- 关键 prompt：审查 T11 代码质量，检查 8 项标准
+
+**审查结果摘要**：
+
+| # | 标准 | 判定 | 严重度 |
+|---|---|---|---|
+| 1 | 职责划分 | PASS | None |
+| 2 | 可读性 | PASS | None |
+| 3 | 接口和类型 | PASS | None |
+| 4 | 错误处理 | PASS | None |
+| 5 | 安全边界 | WARN | Minor（返回可变引用——与代码库约定一致） |
+| 6 | 测试质量 | WARN | Minor（过宽异常匹配 → 已修复；缺少空字符串 ID 测试 → 已修复） |
+| 7 | 可维护性 | PASS | None |
+| 8 | 无真实网络/LLM 依赖 | PASS | None |
+
+**修复的 Minor 问题**：
+
+| # | 问题 | 严重度 | 修复 |
+|---|---|---|---|
+| CQ-2 | `test_create_none_action_raises` 使用过宽异常匹配 `(ValueError, TypeError)` | Minor | 收紧为 `pytest.raises(ValueError, match="action")` |
+| CQ-3 | 缺少 `check_timeout("")` 空字符串 ID 测试 | Minor | 添加 `test_check_timeout_empty_string_id_raises_keyerror` |
+
+**未修复（合理保留）**：
+- CQ-1：返回可变引用（`get_pending()` 和转换方法返回存储对象的引用而非拷贝）——与代码库约定一致（CommandGuard/PathGuard 模式），测试依赖引用同一性（`assert request.action is action`），SPEC 未要求防御性拷贝，Python 无真正私有字段
+- 线程安全/TOCTOU：无锁，但 harness 单线程运行，SPEC 未提及并发
+- `decision` 魔术字符串（"approved"/"denied"/"timeout"）：SPEC 指定 `status` 为权威信号，`decision` 为自由格式字符串，引入 enum 会过度规约
+- `create` 类型标注 `Action | None`：接受 None 但运行时拒绝是防御性边界模式，与 CommandGuard/PathGuard 一致
+
+### 最终验证
+
+| 检查项 | 命令 | 结果 |
+|---|---|---|
+| 目标测试 | `pytest tests/unit/test_hitl.py -v` | **79 passed** in 0.04s |
+| 完整测试套件 | `pytest tests/ -q` | **621 passed** in 7.52s |
+| Lint | `ruff check harness/ tests/` | All checks passed! |
+| 类型检查 | `mypy harness/` | Success: no issues found in 16 source files |
+| 凭据泄露检查 | `grep -rni "api_key\|secret\|password\|token\|sk-" harness/governance/hitl.py tests/unit/test_hitl.py harness/models.py harness/governance/__init__.py` | 无匹配（源码无凭据） |
+| Git 历史扫描 | `git log --all -p \| grep -i "api_key\|secret\|password"` | 仅文档引用（AGENT_LOG 中概念性提及），无真实凭据 |
+
+**Commit hash**：`6fe2dd6` (refactor(T11): complete reviews and verification)
+
+**人工干预**：无
+
+**教训**：
+1. HITLState 是一个简洁的状态机——110 行实现 + 549 行测试（79 个测试），TDD 红绿循环非常顺畅，无 Critical/Major 问题。这得益于 T01 中 `HITLStatus` 枚举和 `HITLRequest` dataclass 的清晰定义。
+2. `request_id` 字段添加是 PLAN T11 API 设计的必然结果——`approve(request_id)`/`deny(request_id)`/`check_timeout(request_id)` 方法签名要求请求有唯一标识。在 `HITLRequest` dataclass 末尾添加带默认值的字段是向后兼容的最小修改方式。
+3. Code Quality Review 发现的过宽异常匹配（`(ValueError, TypeError)`）是 Red 阶段测试编写的常见模式——当实现尚未确定异常类型时，测试用宽匹配作为 provisional 约定。Green 阶段实现确定后应在 Refactor 阶段收紧为精确匹配。
+4. 返回可变引用是 Python dataclass 的常见设计选择——与代码库中 CommandGuard/PathGuard 的模式一致。防御性拷贝会破坏引用同一性测试，且 SPEC 未要求封装级别保护。

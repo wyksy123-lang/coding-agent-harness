@@ -420,7 +420,7 @@ T29 (final acceptance) ← depends on all
 11. **对应 worktree 和 PR 范围**: `feature/governance` / PR5
 12. **完成状态及 commit hash 记录位置**: 本文件 T11 行；AGENT_LOG.md
 
-**状态**: ⬜ TODO | **Commit**: —
+**状态**: ✅ DONE | **Commit**: 6142f32 (Red), 1811c19 (Green), 6fe2dd6 (Refactor)
 
 ---
 
