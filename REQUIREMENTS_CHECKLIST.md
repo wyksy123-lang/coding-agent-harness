@@ -22,10 +22,10 @@
 | R005 | 要求1 §4.4 | 至少 3 轮关键迭代的对话节选与处理决策 | SPEC_PROCESS.md | 审查含 ≥3 轮迭代 | TODO | — |
 | R006 | 要求1 §4.5 | 冷启动验证：换一个不同类型 agent，新 session，仅给 SPEC+PLAN，选 1-2 task，遇不确定暂停询问 | SPEC_PROCESS.md 冷启动记录 | 审查第二个 agent 暂停点与 spec 缺陷 | DONE（Aider 冷启动完成，Gate C 通过） | — |
 | R007 | 要求1 §4.5 | 冷启动记录：暂停点、spec 缺陷、误读、产出差距、SPEC/PLAN 修订 diff | SPEC_PROCESS.md | 审查 before/after diff | DONE（6 个暂停点已记录，5 个缺陷已修复，修订后人工重新批准） | — |
-| R008 | 要求1 §4.6 | git worktree 隔离：每个独立功能/大模块一个 worktree，对应一个 PR | git worktree list + PR 链接 | 审查 worktree 与 PR 一一对应 | IN PROGRESS（T01 + T02 worktree 已创建） | T01-T29 |
-| R009 | 要求1 §4.6 | 每个任务派一个新鲜 subagent 完成 | AGENT_LOG.md | 审查每 task 有独立 subagent 记录 | IN PROGRESS（T01 + T02 Red/Green/Review 各用独立 subagent） | T01-T29 |
-| R010 | 要求1 §4.6 + §3.6 | TDD 强制：红→绿→重构；先写失败测试、得到红色，再写最少代码变绿，再重构。不接受先写实现再补测试 | AGENT_LOG.md + commit 历史 | 审查 commit 顺序：test commit 在 impl commit 之前 | IN PROGRESS（T01: Red 68bd926 → Green fe41b92 → Refactor 79ccece；T02: Red e501189 → Green bfe7750 → Refactor c70afe7） | T01-T29 |
-| R011 | 要求1 §4.6 | 两阶段评审：先 spec 合规检查 → 再代码质量检查；Critical issue 必须修复才能进入下一 task | AGENT_LOG.md | 审查每 task 有两阶段评审记录 | IN PROGRESS（T01 两阶段评审已完成，3 Critical + 3 Major 已修复；T02 两阶段评审已完成，0 Critical + 8 Minor 已修复） | T01-T29 |
+| R008 | 要求1 §4.6 | git worktree 隔离：每个独立功能/大模块一个 worktree，对应一个 PR | git worktree list + PR 链接 | 审查 worktree 与 PR 一一对应 | IN PROGRESS（T01 + T02 + T03 worktree 已创建） | T01-T29 |
+| R009 | 要求1 §4.6 | 每个任务派一个新鲜 subagent 完成 | AGENT_LOG.md | 审查每 task 有独立 subagent 记录 | IN PROGRESS（T01 + T02 + T03 Red/Green/Review 各用独立 subagent） | T01-T29 |
+| R010 | 要求1 §4.6 + §3.6 | TDD 强制：红→绿→重构；先写失败测试、得到红色，再写最少代码变绿，再重构。不接受先写实现再补测试 | AGENT_LOG.md + commit 历史 | 审查 commit 顺序：test commit 在 impl commit 之前 | IN PROGRESS（T01: Red 68bd926 → Green fe41b92 → Refactor 79ccece；T02: Red e501189 → Green bfe7750 → Refactor c70afe7；T03: Red cda280a → Green fd04023 → Refactor f06b2a7） | T01-T29 |
+| R011 | 要求1 §4.6 | 两阶段评审：先 spec 合规检查 → 再代码质量检查；Critical issue 必须修复才能进入下一 task | AGENT_LOG.md | 审查每 task 有两阶段评审记录 | IN PROGRESS（T01 两阶段评审已完成，3 Critical + 3 Major 已修复；T02 两阶段评审已完成，0 Critical + 8 Minor 已修复；T03 两阶段评审已完成，0 Critical + 5 Minor（1 已修复）） | T01-T29 |
 | R012 | 要求1 §4.6 | finishing-a-development-branch 决定 merge/PR/保留/丢弃 | AGENT_LOG.md | 审查分支完成决策记录 | TODO | — |
 
 ## B. 交付文档
@@ -37,7 +37,7 @@
 | R015 | 要求1 §4.2 | 每个功能有客观验收标准 | SPEC.md §10 | 检查每功能有可判定标准 | TODO（SPEC 已创建，待用户审查） | — |
 | R016 | 要求1 §4.3 | PLAN.md：每 task 可由一个 subagent 一次会话完成；含目标、涉及文件、实现要点、验证步骤（含将要写的失败测试） | PLAN.md | 审查 task 粒度与字段完整性 | DONE（T01 已验证可由 subagent 完成） | T01 |
 | R017 | 要求1 §4.3 | PLAN 显式标出 task 间依赖与可并行部分 | PLAN.md | 检查依赖标注 | DONE（依赖图 + 并行计划已存在） | — |
-| R018 | 要求1 §4.7 | PLAN.md 持续更新：每完成一个 task 即标记完成并附 commit hash | PLAN.md + git log | 审查 task 状态与 commit hash | IN PROGRESS（T01 + T02 已标记 ✅ DONE + commit hash） | T01-T29 |
+| R018 | 要求1 §4.7 | PLAN.md 持续更新：每完成一个 task 即标记完成并附 commit hash | PLAN.md + git log | 审查 task 状态与 commit hash | IN PROGRESS（T01 + T02 + T03 已标记 ✅ DONE + commit hash） | T01-T29 |
 | R019 | 要求1 §4.4 | SPEC_PROCESS.md：brainstorming 关键节点、≥3 轮迭代、AI 建议采纳/推翻及理由、brainstorming 反思 | SPEC_PROCESS.md | 逐项检查 | TODO | — |
 | R020 | 要求1 §4.9 | AGENT_LOG.md：时间顺序，每条含时间戳、task 编号、Superpowers 技能、关键 prompt/context、subagent 输出/commit hash、人工干预、教训 | AGENT_LOG.md | 逐条检查字段完整性 | TODO | — |
 | R021 | 要求1 §五.4 | README.md 含：项目简介、安装、运行、分发命令、目录结构、安全边界说明 | README.md | 逐节检查 | TODO | — |
@@ -73,7 +73,7 @@
 | ID | 来源 | 义务 | 计划证据 | 验证方法 | 状态 | PLAN Task |
 |---|---|---|---|---|---|---|
 | R038 | 要求2 A.4-A | 必须自己实现 agent 主循环（组织上下文→调用 LLM→解析动作→分发执行→回灌结果→停机判断） | 源码 | 代码审查 + 单测 | TODO | — |
-| R039 | 要求2 A.4-A | 必须有可注入 mock 的 LLM 抽象层（可替换 mock 离线测试，也可接真实供应商） | 源码 | mock-LLM 单测通过 | TODO | — |
+| R039 | 要求2 A.4-A | 必须有可注入 mock 的 LLM 抽象层（可替换 mock 离线测试，也可接真实供应商） | 源码 | mock-LLM 单测通过 | IN PROGRESS（T03 LLMClient ABC 已实现；T04 MockLLMClient + T05 DeepSeekClient 待实现） | T03-T05 |
 | R040 | 要求2 A.4-A | 允许使用底层零件（LLM 供应商单次对话 API、HTTP 库、向量库、解析库） | SPEC 说明 | 审查选型 | TODO | — |
 | R041 | 要求2 A.4-A | 不允许建在现成 agent 编排框架高层循环之上（LangChain AgentExecutor、AutoGen、CrewAI、LlamaIndex agent、编码智能体 SDK agent runner） | 源码 + SPEC | 依赖审查无禁止框架 | TODO | — |
 | R042 | 要求2 A.4-B | 反馈信号 = 代码校验器/传感器（解析产物→客观判定→回灌），不是提示词 | 源码 | 单测验证确定性 | TODO | — |
