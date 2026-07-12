@@ -1197,3 +1197,171 @@
 2. 恒真断言（`assert ... or True`）是测试质量的典型陷阱——Code Quality Review 发现 `test_register_single_tool` 中的恒真断言，该测试看似通过但实际不验证任何内容。Review 阶段应检查每个 assert 是否真正测试了预期行为。
 3. 过宽的异常匹配（`pytest.raises((KeyError, ValueError))`）会掩盖回归——如果实现改为抛出错误的异常类型，测试仍会通过。应始终匹配精确的异常类型。
 4. `__init__.py` re-export 是 Python 包的最佳实践——为下游 task（T07/T08/T18）提供更简洁的导入路径 `from harness.tools import Tool` 而非 `from harness.tools.base import Tool`。
+
+---
+
+## LOG-021 — TASK-09 Red 阶段
+
+**时间戳**：2026-07-12
+
+**Task 编号**：TASK-09（PathGuard 路径围栏）
+
+**触发的 Superpowers 技能**：
+- `subagent-driven-development`
+- `test-driven-development`
+
+**subagent 信息**：
+- 类型：`general`
+- Task ID：`ses_0aa12a627ffeu6wY5i2LuDj5zU`
+- 关键 prompt：仅编写 `tests/unit/test_path_guard.py` 失败测试，不写任何实现代码
+
+**subagent 执行内容**：
+1. 创建 `harness/governance/__init__.py`（空文件，包标记）
+2. 编写 `tests/unit/test_path_guard.py`（220 行，38 个测试，6 个测试类）
+   - TestPathGuardExistence（3 个测试）：验证 PathGuard 是类、有 check 方法、check 可调用
+   - TestPathGuardLegitimatePaths（10 个测试）：验证简单/嵌套/深层相对路径、不存在的子目录、仅文件名、./ 前缀、. 路径、target 本身、尾斜杠、内部 `..` 不越界 → ALLOW
+   - TestPathGuardOutOfBounds（10 个测试）：验证 `..` 穿越、双重 `..`、绝对路径外部/内部、子目录逃逸、前导斜杠、带前缀 `..`、根路径、父目录、兄弟目录 → DENY
+   - TestPathGuardEdgeCases（9 个测试）：验证空路径、None path、None target、null byte、不存在的 target、空 target、仅 `..`、仅斜杠、深层相对路径逃逸 → DENY
+   - TestPathGuardSymlinkHandling（3 个测试，平台不支持时跳过）：验证符号链接指向外部 DENY、指向内部 ALLOW、目录符号链接指向外部 DENY
+   - TestPathGuardReturnType（3 个测试）：验证返回 GuardResult 枚举、DENY 返回正确枚举、ALLOW 和 DENY 不同
+
+**Red 阶段验证**：
+- 命令：`pytest tests/unit/test_path_guard.py -v`
+- 退出状态码：`2`（collection error）
+- 关键失败原因：
+  ```
+  ModuleNotFoundError: No module named 'harness.governance.path_guard'
+  ```
+- 结果：0 collected, 1 error
+- 失败原因确认：`harness/governance/path_guard.py` 尚未创建，测试因导入目标模块不存在而失败。测试文件本身语法正确，导入语句合法，断言全面。**不是语法错误、环境错误或测试本身错误。**
+
+**人工干预**：无
+
+**Commit hash**：`26ac727` (test(T09): add failing tests)
+
+**教训**：—
+
+---
+
+## LOG-022 — TASK-09 Green 阶段
+
+**时间戳**：2026-07-12
+
+**Task 编号**：TASK-09（PathGuard 路径围栏）
+
+**触发的 Superpowers 技能**：
+- `subagent-driven-development`
+- `test-driven-development`
+
+**subagent 信息**：
+- 类型：`general`
+- Task ID：`ses_0aa0e6457ffenMw547C2Z3WSrE`
+- 关键 prompt：仅实现让 `tests/unit/test_path_guard.py` 通过的最少代码
+
+**subagent 执行内容**：
+1. 创建 `harness/governance/path_guard.py`（30 行）：
+   - `PathGuard` 类：`@staticmethod check(path: str, target_directory: str) -> GuardResult`
+   - 拒绝 None/空/null-byte 输入 → 拒绝绝对路径（除 target 本身）→ realpath 解析 target + isdir 检查 → join + realpath 解析路径（处理符号链接）→ commonpath 检查子树 → 所有异常捕获 → DENY
+   - 使用 `os.path.realpath`（解析符号链接）+ `os.path.commonpath`（避免前缀兄弟攻击）
+
+**Green 阶段验证**：
+- 命令：`pytest tests/unit/test_path_guard.py -v`
+- 退出状态码：`0`
+- 结果：**38 passed** in 0.03s
+- 从 Red 到 Green：`ModuleNotFoundError` → 全部 38 个测试通过
+- 回归检查：`pytest tests/ -v` 同样 306 passed，无回归
+
+**人工干预**：无
+
+**Commit hash**：`9915a30` (feat(T09): implement minimal green solution)
+
+**教训**：—
+
+---
+
+## LOG-023 — TASK-09 Refactor + 两阶段评审 + 最终验证
+
+**时间戳**：2026-07-12
+
+**Task 编号**：TASK-09（PathGuard 路径围栏）
+
+**触发的 Superpowers 技能**：
+- `test-driven-development`（重构阶段）
+- `subagent-driven-development`（Code Quality Review subagent）
+
+### Refactor 阶段
+
+**执行内容**：
+1. 为 `PathGuard` 类和 `check` 方法添加 docstring（引用 SPEC §3.4.1）
+2. 在 `harness/governance/__init__.py` 添加 re-export `PathGuard`（遵循 T06 建立的模式）
+
+**验证**：`pytest tests/unit/test_path_guard.py -v` → 38 passed（无变化，行为不变）
+
+### 第一阶段：Specification Compliance Review
+
+**对照**：SPEC.md §3.4.1（PathGuard）、§9.2（危险动作）、§9.6（机制编码）、§10.1 AC6（路径围栏）、PLAN.md T09
+
+**发现 Critical 问题及修复**：无 Critical 问题
+
+**检查结果**：
+
+| 检查项 | 结果 |
+|---|---|
+| PathGuard.check(path, target_directory) -> GuardResult | ✅ 符合 |
+| 解析路径为绝对路径 → 检查子树 → 检查 `..` 穿越 | ✅ 符合 |
+| 越界 → DENY；合法 → ALLOW；解析失败 → DENY | ✅ 符合 |
+| 仅检查文件操作工具（不实现工具本身） | ✅ 符合 |
+| 无越界实现（未实现 T10 CommandGuard / T11 HITLState） | ✅ 符合 |
+| 无真实网络/LLM 依赖 | ✅ 符合 |
+
+**越界实现检查**：无越界（PathGuard 仅实现路径检查，不涉及 CommandGuard 或 HITLState）
+
+### 第二阶段：Code Quality Review
+
+**subagent 信息**：
+- 类型：`general`（reviewer 角色）
+- Task ID：`ses_0aa018cacffeRymAgiW7xo73x4`
+- 关键 prompt：审查 T09 代码质量，检查 8 项标准
+
+**审查结果摘要**：
+
+| # | 标准 | 判定 | 严重度 |
+|---|---|---|---|
+| 1 | 职责划分 | PASS | None |
+| 2 | 可读性 | PASS | None |
+| 3 | 接口和类型 | PASS | None |
+| 4 | 错误处理 | PASS | None |
+| 5 | 安全边界 | PASS | Minor（TOCTOU 竞争——固有局限，合理保留） |
+| 6 | 测试质量 | PASS | Minor（1 个轻微恒真断言、2 个可选测试缺口） |
+| 7 | 可维护性 | PASS | Minor（`"\x00"` 可命名为常量——42 行文件可忽略） |
+| 8 | 无真实网络/LLM 依赖 | PASS | None |
+
+**修复的问题**：无 Critical 或 Major 问题需修复
+
+**未修复（合理保留）**：
+- TOCTOU 竞争：`realpath` 解析与调用方后续文件操作之间的竞争——这是 check 式 guard 的固有局限，需在工具层（T07）使用 `O_NOFOLLOW` 修复，SPEC 未要求 TOCTOU 保护
+- `test_allow_and_deny_are_distinct` 轻微恒真断言：无害的健全性检查
+- 非字符串非 None 输入（如 int）未显式测试：已手动验证正确处理（TypeError 捕获 → DENY）
+- 相对 target_directory 未显式测试：realpath 正确处理
+- `"\x00"` 可命名为常量：42 行文件中可忽略
+
+### 最终验证
+
+| 检查项 | 命令 | 结果 |
+|---|---|---|
+| 目标测试 | `pytest tests/unit/test_path_guard.py -v` | **38 passed** in 0.03s |
+| 完整测试套件 | `pytest tests/ -v` | **306 passed** in 0.37s |
+| Lint | `ruff check harness/ tests/` | All checks passed! |
+| 类型检查 | `mypy harness/` | Success: no issues found in 12 source files |
+| 凭据泄露检查 | `grep -rni "api_key\|secret\|password\|token\|sk-" harness/governance/ tests/unit/test_path_guard.py` | 无真实凭据（仅测试 fixture 文件名如 `secret.txt`） |
+| Git 历史扫描 | `git log --all -p \| grep -i "api_key\|secret\|password"` | 仅文档引用和测试 fixture，无真实凭据 |
+
+**Commit hash**：`7e6babd` (refactor(T09): complete reviews and verification)
+
+**人工干预**：无
+
+**教训**：
+1. PathGuard 是一个安全关键组件——使用 `os.path.realpath` + `os.path.commonpath`（而非简单的 `startswith`）正确防御了前缀兄弟攻击（`../ws_evil/x` 不会被误判为在 `./workspace` 内）。Code Quality Review 手动验证了此攻击向量。
+2. TOCTOU 竞争是 check 式 guard 的固有局限——PathGuard 只能在调用时检查路径安全性，无法防止调用后符号链接被替换。这需要在工具层（T07 write_file/read_file）使用 `O_NOFOLLOW` 等机制补充，属于 T07 的职责范围。
+3. 42 行实现 + 220 行测试（38 个测试）——TDD 红绿循环非常顺畅，无 Critical/Major 问题。这得益于 T01 中 `GuardResult` 枚举的清晰定义和 conftest.py 中 `tmp_workspace` fixture 的复用。
+4. 符号链接测试使用 `platform.skipif` 正确处理了不支持符号链接的平台——这是跨平台测试的最佳实践。
