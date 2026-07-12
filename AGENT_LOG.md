@@ -1758,3 +1758,189 @@
 2. Code Quality Review 发现的重复测试是测试编写中的常见问题——当多个测试类从不同角度测试同一行为时（如 RmRf 类和 PartialMatches 类都测试 `rm -rf` 在复合命令中的匹配），容易出现完全相同的测试用例。Review 阶段应检查是否有完全重复的测试。
 3. 空字符串 pattern 是一个容易被忽略的边缘情况——`re.compile("")` 成功且 `"".search(cmd)` 匹配任何字符串（在位置 0），导致所有命令返回 PENDING。这是一个"正确但可能令人惊讶"的行为，值得有测试覆盖。
 4. fail-open vs fail-closed 的设计选择——CommandGuard 对非字符串输入返回 ALLOW（fail-open），而 PathGuard 返回 DENY（fail-closed）。这是因为两个 guard 的 SPEC 语义不同：CommandGuard 的"全部不命中 → ALLOW"意味着非字符串无法匹配任何 pattern 故 ALLOW；PathGuard 的"路径解析失败 → DENY"意味着任何解析问题都拒绝。两种设计都符合各自的 SPEC 语义。
+
+---
+
+## LOG-030 — TASK-08 Red 阶段
+
+**时间戳**：2026-07-12
+
+**Task 编号**：TASK-08（Shell 工具 run_command / run_tests）
+
+**触发的 Superpowers 技能**：
+- `subagent-driven-development`
+- `test-driven-development`
+
+**subagent 信息**：
+- 类型：`general`
+- Task ID：`ses_0a996730dffes4Nc7PTEzeSyPT`
+- 关键 prompt：仅编写 `tests/unit/test_shell.py` 失败测试，不写任何实现代码
+
+**subagent 执行内容**：
+1. 编写 `tests/unit/test_shell.py`（652 行，53 个测试，9 个测试类）
+   - TestRunCommandToolConstruction（8 个测试）：验证构造、Tool 子类、name/schema 属性
+   - TestRunCommandToolSafeExecution（9 个测试）：验证 echo 命令执行、stdout/stderr/exit_code 捕获、带参数命令、target_directory 作为 cwd
+   - TestRunCommandToolFailedExecution（3 个测试）：验证 false/exit 1 命令返回非零 exit_code、success 仍为 True
+   - TestRunCommandToolDangerousCommands（12 个测试）：验证 rm -rf/git push/sudo/curl/docker 匹配 PENDING、危险命令不执行、自定义 patterns、空 patterns、复合命令
+   - TestRunCommandToolTimeout（2 个测试）：验证超时返回错误
+   - TestRunCommandToolEdgeCases（3 个测试）：验证空命令、缺失 cmd key、None cmd 处理
+   - TestRunTestsToolConstruction（6 个测试）：验证构造、Tool 子类、name/schema 属性
+   - TestRunTestsToolExecution（9 个测试）：验证成功/失败测试运行返回 report_path、报告文件存在、使用 config test_command、在 target_directory 运行、.harness 目录创建、无测试文件/收集错误场景
+   - TestRunTestsToolTimeout（1 个测试）：验证慢测试超时返回错误
+
+**Red 阶段验证**：
+- 命令：`pytest tests/unit/test_shell.py -v`
+- 退出状态码：`2`（collection error）
+- 关键失败原因：
+  ```
+  ModuleNotFoundError: No module named 'harness.tools.shell'
+  ```
+- 结果：0 collected, 1 error
+- 失败原因确认：`harness/tools/shell.py` 尚未创建，测试因导入目标模块不存在而失败。测试文件本身语法正确，导入语句合法，断言全面。**不是语法错误、环境错误或测试本身错误。**
+
+**人工干预**：无
+
+**Commit hash**：`330befa` (test(T08): add failing tests)
+
+**教训**：—
+
+---
+
+## LOG-031 — TASK-08 Green 阶段
+
+**时间戳**：2026-07-12
+
+**Task 编号**：TASK-08（Shell 工具 run_command / run_tests）
+
+**触发的 Superpowers 技能**：
+- `subagent-driven-development`
+- `test-driven-development`
+
+**subagent 信息**：
+- 类型：`general`
+- Task ID：`ses_0a97b4099ffeEPX7gwmJIIaqNz`
+- 关键 prompt：仅实现让 `tests/unit/test_shell.py` 通过的最少代码
+
+**subagent 执行内容**：
+1. 创建 `harness/tools/shell.py`（129 行）：
+   - `RunCommandTool(Tool)`：接收 cmd → CommandGuard 检查 → ALLOW 直接执行 / PENDING 返回待审批 → 执行 → 返回 stdout/stderr/exit_code
+   - `RunTestsTool(Tool)`：运行 Config.test_command → 创建 .harness 目录 → 返回 report_path
+   - 超时控制：subprocess.run timeout 参数
+   - 使用 subprocess.run(shell=True, capture_output=True, text=True)
+2. 更新 `harness/tools/__init__.py`：添加 re-export `RunCommandTool`, `RunTestsTool`
+
+**Green 阶段验证**：
+- 命令：`pytest tests/unit/test_shell.py -v`
+- 退出状态码：`0`
+- 结果：**53 passed** in 6.72s
+- 从 Red 到 Green：`ModuleNotFoundError` → 全部 53 个测试通过
+- 回归检查：`pytest tests/ -v` 同样 536 passed，无回归
+
+**人工干预**：无
+
+**Commit hash**：`7650e9d` (feat(T08): implement minimal green solution)
+
+**教训**：—
+
+---
+
+## LOG-032 — TASK-08 Refactor + 两阶段评审 + 最终验证
+
+**时间戳**：2026-07-12
+
+**Task 编号**：TASK-08（Shell 工具 run_command / run_tests）
+
+**触发的 Superpowers 技能**：
+- `test-driven-development`（重构阶段）
+- `subagent-driven-development`（Code Quality Review subagent）
+
+### Refactor 阶段
+
+**执行内容**：
+1. 修复 Code Quality Review 发现的 1 个 Major + 5 个 Minor 问题：
+   - CQ-4.1（Major）：`RunTestsTool` 不验证 `report.json` 是否创建 → 添加 `os.path.isfile(report_path)` 检查，未创建时返回 `ToolResult(success=False, error="report.json not created")`
+   - CQ-4.2（Minor）：`subprocess.run` 的 `FileNotFoundError`/`OSError` 未捕获 → 提取 `_run_shell()` 共享辅助函数，添加 `except OSError` 处理
+   - CQ-4.3（Minor）：`RunTestsTool` 丢弃 `proc.returncode` → 在 output 中添加 `exit_code` 字段
+   - CQ-7.1（Minor）：`subprocess.run` + `TimeoutExpired` 代码重复 → 提取 `_run_shell()` 共享辅助函数，集中错误处理
+   - CQ-6.1（Minor）：部分弱断言（仅检查 key 存在）→ 保留（已有更强的测试覆盖同一行为）
+   - CQ-6.2（Minor）：缺少错误路径测试 → 新增 6 个测试（report.json 未创建、exit_code 在 output、非存在 target_directory 的 OSError 处理）
+2. 修复 ruff I001 导入排序问题
+
+**验证**：`pytest tests/unit/test_shell.py -v` → 59 passed（从 53 增至 59）
+
+### 第一阶段：Specification Compliance Review
+
+**对照**：SPEC.md §3.2.4（run_tests）、§3.2.5（run_command）、§3.4.2（CommandGuard）、§9.2（危险动作）、§9.6（机制编码）、§10.1 AC7（危险命令）、PLAN.md T08
+
+**发现 Critical 问题及修复**：无 Critical 问题
+
+**检查结果**：
+
+| 检查项 | 结果 |
+|---|---|
+| RunCommandTool: cmd → CommandGuard → ALLOW/PENDING → execute | ✅ 符合 |
+| RunTestsTool: runs Config.test_command → returns report.json path | ✅ 符合 |
+| run_command output: {"stdout", "stderr", "exit_code"} | ✅ 符合 |
+| 危险命令 → PENDING | ✅ 符合 |
+| 超时控制: Config.pytest_timeout | ✅ 符合 |
+| 测试在 target_directory 内运行 | ✅ 符合 |
+| report.json 未创建时返回错误（SPEC §3.2.4 pytest 崩溃 → COLLECTION） | ✅ 符合（修复后） |
+| 无越界实现（未实现 T11 HITLState / T12 parser） | ✅ 符合 |
+| 无真实网络/LLM 依赖 | ✅ 符合 |
+
+**越界实现检查**：无越界（RunCommandTool 和 RunTestsTool 仅实现工具执行，不涉及 HITLState 或 TestResultParser）
+
+### 第二阶段：Code Quality Review
+
+**subagent 信息**：
+- 类型：`general`（reviewer 角色）
+- Task ID：`ses_0a974c19bffesgabXcF947CF54`
+- 关键 prompt：审查 T08 代码质量，检查 8 项标准
+
+**审查结果摘要**：
+
+| # | 标准 | 判定 | 严重度 |
+|---|---|---|---|
+| 1 | 职责划分 | PASS | None |
+| 2 | 可读性 | PASS | None |
+| 3 | 接口和类型 | PASS | None |
+| 4 | 错误处理 | FAIL → 已修复 | Major（report.json 未验证 → 已修复）+ Minor（OSError 未捕获 → 已修复） |
+| 5 | 安全边界 | PASS | None |
+| 6 | 测试质量 | WARN | Minor（弱断言 + 缺少错误路径测试 → 已修复） |
+| 7 | 可维护性 | WARN | Minor（代码重复 → 已修复） |
+| 8 | 无真实网络/LLM 依赖 | PASS | None |
+
+**修复的问题**：
+
+| # | 问题 | 严重度 | 修复 |
+|---|---|---|---|
+| CQ-4.1 | `RunTestsTool` 不验证 `report.json` 是否创建 | Major | 添加 `os.path.isfile(report_path)` 检查 |
+| CQ-4.2 | `subprocess.run` 的 `OSError`/`FileNotFoundError` 未捕获 | Minor | 提取 `_run_shell()` 辅助函数，添加 `except OSError` |
+| CQ-4.3 | `RunTestsTool` 丢弃 `proc.returncode` | Minor | 在 output 中添加 `exit_code` 字段 |
+| CQ-7.1 | `subprocess.run` + `TimeoutExpired` 代码重复 | Minor | 提取 `_run_shell()` 共享辅助函数 |
+| CQ-6.2 | 缺少错误路径测试 | Minor | 新增 6 个测试（report 未创建、OSError 处理、exit_code 验证） |
+
+**未修复（合理保留）**：
+- CQ-6.1：部分弱断言（仅检查 key 存在）——已有更强的测试覆盖同一行为，保留无害的健全性检查
+- `shell=True` 的命令注入风险——CommandGuard 是设计中的保护机制，HITL 审批是安全网，SPEC 设计如此
+
+### 最终验证
+
+| 检查项 | 命令 | 结果 |
+|---|---|---|
+| 目标测试 | `pytest tests/unit/test_shell.py -v` | **59 passed** in 6.97s |
+| 完整测试套件 | `pytest tests/ -v` | **542 passed** in 7.39s |
+| Lint | `ruff check harness/tools/shell.py tests/unit/test_shell.py harness/tools/__init__.py` | All checks passed! |
+| 类型检查 | `mypy harness/` | Success: no issues found in 15 source files |
+| 凭据泄露检查 | `grep -rni "api_key\|secret\|password\|token\|sk-" harness/tools/shell.py tests/unit/test_shell.py` | 无匹配（源码无凭据） |
+| Git 历史扫描 | `git log --all -p \| grep -i "api_key\|secret\|password"` | 仅文档引用和测试 fixture，无真实凭据 |
+
+**Commit hash**：`7d4d9f4` (refactor(T08): complete reviews and verification)
+
+**人工干预**：无
+
+**教训**：
+1. `RunTestsTool` 的 Major 问题（不验证 report.json 是否创建）是 TDD happy-path 测试的典型遗漏——53 个测试全部通过，但当 test_command 无效时 report.json 不会被创建，工具仍返回 success=True。Code Quality Review 的 `os.path.isfile` 检查是必要的防御。
+2. `subprocess.run` 除了 `TimeoutExpired` 还可能抛出 `FileNotFoundError`（cwd 不存在）、`PermissionError` 等 `OSError` 子类——这些异常会穿透 `execute()` 方法违反 `Tool` 契约（应返回 `ToolResult` 而非抛异常）。提取 `_run_shell()` 共享辅助函数集中处理是最佳实践。
+3. 代码重复（`subprocess.run` + `TimeoutExpired` 在两个工具中重复）是提取共享辅助函数的信号——虽然只有 ~10 行重复，但集中错误处理可以一次性修复所有 `OSError` 未捕获问题。
+4. `RunTestsTool` 的 `exit_code` 字段虽然不是 SPEC 硬要求，但对调试和下游 T12 parser 有价值——当 report.json 未创建时，`exit_code` 可以帮助区分"pytest 崩溃"和"测试失败"两种场景。

@@ -330,7 +330,7 @@ T29 (final acceptance) ← depends on all
 11. **对应 worktree 和 PR 范围**: `feature/tools` / PR4
 12. **完成状态及 commit hash 记录位置**: 本文件 T08 行；AGENT_LOG.md
 
-**状态**: ⬜ TODO | **Commit**: —
+**状态**: ✅ DONE | **Commit**: 330befa (Red), 7650e9d (Green), 7d4d9f4 (Refactor)
 
 ---
 
