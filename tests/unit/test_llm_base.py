@@ -91,6 +91,12 @@ class TestLLMResponse:
         resp = LLMResponse(content="done", tool_calls=[], finish_reason="stop")
         assert resp.tool_calls == []
 
+    def test_llm_response_completely_empty(self):
+        resp = LLMResponse(content="", tool_calls=[], finish_reason="stop")
+        assert resp.content == ""
+        assert resp.tool_calls == []
+        assert resp.finish_reason == "stop"
+
     def test_llm_response_multiple_tool_calls(self):
         tc1 = ToolCall(id="c1", name="write_file", arguments={"path": "a"})
         tc2 = ToolCall(id="c2", name="read_file", arguments={"path": "b"})
