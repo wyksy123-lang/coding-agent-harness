@@ -4,8 +4,6 @@ import json
 from dataclasses import is_dataclass
 from pathlib import Path
 
-import pytest
-
 from harness.feedback.parser import TestResultParser
 from harness.models import Failure, FailureType, TestResult
 
@@ -31,7 +29,7 @@ class TestTestResultParserExistence:
         assert hasattr(TestResultParser, "parse")
 
     def test_parse_is_callable(self):
-        assert callable(getattr(TestResultParser, "parse"))
+        assert callable(TestResultParser.parse)
 
     def test_parser_can_be_instantiated(self):
         parser = TestResultParser()
@@ -152,14 +150,14 @@ class TestParseSyntaxError:
         result = TestResultParser.parse(_load_fixture("syntax_error.json"))
         assert result.status == "ERROR"
 
-    def test_failures_has_at_least_one_entry(self):
+    def test_failures_has_one_entry(self):
         result = TestResultParser.parse(_load_fixture("syntax_error.json"))
-        assert len(result.failures) >= 1
+        assert len(result.failures) == 1
 
-    def test_failure_type_is_collection_or_syntax(self):
+    def test_failure_type_is_syntax(self):
         result = TestResultParser.parse(_load_fixture("syntax_error.json"))
         failure = result.failures[0]
-        assert failure.type in (FailureType.COLLECTION, FailureType.SYNTAX)
+        assert failure.type == FailureType.SYNTAX
 
     def test_failure_message_contains_syntaxerror(self):
         result = TestResultParser.parse(_load_fixture("syntax_error.json"))
@@ -180,10 +178,10 @@ class TestParseTypeError:
         result = TestResultParser.parse(_load_fixture("type_error.json"))
         assert len(result.failures) == 1
 
-    def test_failure_message_contains_valueerror_or_typeerror(self):
+    def test_failure_message_contains_valueerror(self):
         result = TestResultParser.parse(_load_fixture("type_error.json"))
         failure = result.failures[0]
-        assert "ValueError" in failure.message or "TypeError" in failure.message
+        assert "ValueError" in failure.message
 
     def test_failure_test_name(self):
         result = TestResultParser.parse(_load_fixture("type_error.json"))
@@ -344,7 +342,7 @@ class TestParseMissingFields:
         )
         result = TestResultParser.parse(json_str)
         failure = result.failures[0]
-        assert isinstance(failure.line, int)
+        assert failure.line == 0
 
     def test_missing_crash_fills_default_file(self):
         json_str = json.dumps(
@@ -362,7 +360,7 @@ class TestParseMissingFields:
         )
         result = TestResultParser.parse(json_str)
         failure = result.failures[0]
-        assert isinstance(failure.file, str)
+        assert failure.file == ""
 
     def test_missing_summary_uses_empty_dict(self):
         json_str = json.dumps(
@@ -448,3 +446,126 @@ class TestParseExpectedActual:
         failure = result.failures[0]
         assert isinstance(failure.expected, str)
         assert isinstance(failure.actual, str)
+
+
+class TestParseEdgeCases:
+    """Edge cases identified during Code Quality Review."""
+
+    def test_non_dict_json_list_returns_error(self):
+        result = TestResultParser.parse("[1, 2, 3]")
+        assert result.status == "ERROR"
+        assert result.failures[0].type == FailureType.COLLECTION
+
+    def test_non_dict_json_scalar_returns_error(self):
+        result = TestResultParser.parse("42")
+        assert result.status == "ERROR"
+        assert result.failures[0].type == FailureType.COLLECTION
+
+    def test_non_dict_json_string_returns_error(self):
+        result = TestResultParser.parse('"hello"')
+        assert result.status == "ERROR"
+        assert result.failures[0].type == FailureType.COLLECTION
+
+    def test_null_longrepr_in_test_does_not_crash(self):
+        json_str = json.dumps(
+            {
+                "exitcode": 1,
+                "summary": {"total": 1, "collected": 1},
+                "tests": [
+                    {
+                        "nodeid": "test_x.py::test_a",
+                        "outcome": "failed",
+                        "call": {"outcome": "failed", "longrepr": None},
+                    }
+                ],
+            }
+        )
+        result = TestResultParser.parse(json_str)
+        assert result.status == "FAIL"
+        assert len(result.failures) == 1
+        assert result.failures[0].message == ""
+
+    def test_null_longrepr_in_collector_does_not_crash(self):
+        json_str = json.dumps(
+            {
+                "exitcode": 2,
+                "summary": {"total": 0, "collected": 0},
+                "collectors": [
+                    {"nodeid": "test_x.py", "outcome": "failed", "longrepr": None}
+                ],
+            }
+        )
+        result = TestResultParser.parse(json_str)
+        assert result.status == "ERROR"
+        assert len(result.failures) == 1
+        assert result.failures[0].message == ""
+
+    def test_null_crash_message_falls_back_to_longrepr(self):
+        json_str = json.dumps(
+            {
+                "exitcode": 1,
+                "summary": {"total": 1, "collected": 1},
+                "tests": [
+                    {
+                        "nodeid": "test_x.py::test_a",
+                        "outcome": "failed",
+                        "call": {
+                            "outcome": "failed",
+                            "crash": {"path": "/tmp/x.py", "lineno": 3, "message": None},
+                            "longrepr": "fallback message with ValueError",
+                        },
+                    }
+                ],
+            }
+        )
+        result = TestResultParser.parse(json_str)
+        failure = result.failures[0]
+        assert "fallback message" in failure.message
+        assert failure.type == FailureType.RUNTIME
+
+    def test_tests_field_non_list_does_not_crash(self):
+        json_str = json.dumps(
+            {
+                "exitcode": 0,
+                "summary": {"total": 0, "collected": 0},
+                "tests": "not a list",
+            }
+        )
+        result = TestResultParser.parse(json_str)
+        assert isinstance(result, TestResult)
+        assert result.failures == []
+
+    def test_collectors_field_non_list_does_not_crash(self):
+        json_str = json.dumps(
+            {
+                "exitcode": 0,
+                "summary": {"total": 0, "collected": 0},
+                "collectors": "not a list",
+            }
+        )
+        result = TestResultParser.parse(json_str)
+        assert isinstance(result, TestResult)
+        assert result.failures == []
+
+    def test_test_entry_non_dict_skipped(self):
+        json_str = json.dumps(
+            {
+                "exitcode": 1,
+                "summary": {"total": 1, "collected": 1},
+                "tests": ["not a dict"],
+            }
+        )
+        result = TestResultParser.parse(json_str)
+        assert result.failures == []
+
+    def test_null_summary_uses_empty_dict(self):
+        json_str = json.dumps(
+            {
+                "exitcode": 0,
+                "summary": None,
+                "tests": [],
+            }
+        )
+        result = TestResultParser.parse(json_str)
+        assert isinstance(result.summary, dict)
+        assert result.summary.get("exitcode") == 0
