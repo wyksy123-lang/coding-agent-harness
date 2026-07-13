@@ -2828,3 +2828,129 @@
 1. 纯状态机也要检查与既有模块的隐式数据契约；T16 fingerprint 会被 T14 memory recorder 解析。
 2. 指纹既要利于卡死检测，也要保留足够可读信息给记忆和反馈闭环使用。
 3. 小范围 reviewer 仍有效发现了跨模块契约问题，值得在后续 T18 agent loop 接线前保留。
+
+---
+
+## LOG-043 — T17 CredentialManager
+
+**时间**：2026-07-13  
+**执行环境**：Windows Codex 当前 checkout（未创建嵌套 worktree）  
+**Worktree**：`C:\Users\裴斐\Documents\coding-agent-harness-codex`  
+**Branch**：`codex/task/T17-credential-manager`  
+**Base main**：`f3bf53f` (`Merge pull request #21 from wyksy123-lang/codex/task/T16-round-tracker`)  
+**Task**：T17 — CredentialManager（keyring 主路径 + `.env` 降级）
+
+**接管 / 同步记录**：
+- 用户说明 T16 已验证并 push，可继续下一任务。
+- `git status --short --branch` 显示从 clean `main` 创建 `codex/task/T17-credential-manager`；`git log` 确认 `main/origin/main` 位于 T16 merge commit `f3bf53f`。
+- 本轮只执行 T17；未 push、未 merge、未修改 `main`。
+
+### Red 阶段
+
+**subagent 信息**：
+- 名称：Parfit
+- Agent ID：`019f5b5d-b6fd-7992-8979-8a18059e1cb8`
+- 任务：只做 T17 implementation-prep，不编辑文件；读取 T17 PLAN/SPEC 与相关模块风格，建议 API、mock keyring、`.env` fallback、掩码和安全测试边界。
+- 结果：建议保留 PLAN 公开 API，并增加 `key_name`、`env_file`、`keyring_backend` 可测试注入；用 Protocol fake keyring；`.env` 只做轻量解析；status 保留 `sk-` 前缀和末 4 位，短 key 全掩码；不要在日志或测试中出现真实凭据。
+
+**Red 执行内容**：
+- 新增 `tests/unit/test_credentials.py`。
+- 覆盖 `setup/status/update/clear/get_key`、mock keyring 主路径、keyring 不可用 `.env` 降级、状态掩码不回显明文、missing 返回 `None`。
+- fake key 使用字符串拼接构造，避免新增连续高置信 secret 字面量。
+
+**Red 验证**：
+- 命令：`pytest tests/unit/test_credentials.py -v`
+- 退出状态码：`1`
+- 关键失败原因：`ModuleNotFoundError: No module named 'harness.credentials'`
+- 判定：失败由目标模块缺失导致，非语法、依赖或测试自身错误。
+
+**Commit hash**：`3d88110` (`test(T17): add failing credential tests [subagent: Parfit; human: pending review]`)
+
+### Green 阶段
+
+**执行者**：Codex 主 agent
+
+**执行内容**：
+- 新增 `harness/credentials/__init__.py` 与 `harness/credentials/manager.py`。
+- 实现 `CredentialManager` 默认使用 OS keyring，测试可注入 fake backend。
+- 实现 `setup()` / `update()` 使用 `getpass.getpass()` 隐藏输入，优先写 keyring，keyring 不可用时写 `.env` 并 warning。
+- 实现 `status()` 掩码、`clear()` 清理 keyring 与 `.env` fallback、`get_key()` keyring 优先并 fallback `.env`。
+- 修正 `.gitignore`，为 `harness/credentials/` 增加源码目录例外，避免通用 `credentials/` ignore 规则吞掉 T17 源码包。
+
+**Green 验证**：
+- `pytest tests/unit/test_credentials.py -v` → 8 passed
+- `pytest tests/unit/test_config.py tests/unit/test_llm_deepseek.py -q` → 91 passed
+- `mypy harness/credentials/manager.py` → Success
+- `ruff check harness/credentials/manager.py tests/unit/test_credentials.py` → 当前 Windows 环境未安装 `ruff`（command not found）
+
+**Commit hash**：`d21bda2` (`feat(T17): implement credential manager [subagent: Parfit; human: pending review]`)
+
+### Refactor / Review 阶段
+
+**Specification Compliance Review**：
+- Reviewer：Faraday
+- Agent ID：`019f5b6d-e74c-7441-94ed-5f479e2d7969`
+- 输入：Base `f3bf53f`，Head `d21bda2`，PLAN.md T17、SPEC.md §3.7/§4.2/§7.1、T17 文件范围。
+- 结果：No Critical findings；Important 1 个，Minor 1 个。
+- Important：短 key 掩码边界可能暴露全部字符。
+- Minor：fallback warning 已实现但测试未锁定。
+
+**Code Quality Review**：
+- 初始 reviewer：Socrates，Agent ID `019f5b6d-fb64-72f1-89af-6285cea01451`，连续超时后关闭，未采用结果。
+- 替代 reviewer：Carver，Agent ID `019f5b7b-6647-7860-b4ff-7c7a8d765ecb`
+- 输入：Base `f3bf53f`，Head `HEAD`，重点审查 `.gitignore`、`harness/credentials/manager.py`、`tests/unit/test_credentials.py`。
+- 结果：Critical 1 个、Important 3 个、Minor 1 个。
+- Critical：keyring 写入/删除失败时，如果旧 keyring 值仍可读，同一 manager 的 `get_key()` 会继续返回 stale key。
+- Important：短 key 掩码、`.env` spacing/export 解析与去重、相关测试缺口。
+- Minor：测试 helper 类型应使用 Protocol 而不是 `object`。
+
+**Review fix 过程**：
+- 增加失败/回归测试：
+  - `test_status_fully_masks_short_key`
+  - `test_update_uses_env_fallback_after_keyring_write_failure`
+  - `test_clear_ignores_stale_keyring_after_delete_failure`
+  - `test_get_key_reads_spaced_export_env_assignment`
+  - fallback warning 通过 `caplog` 断言不含明文 key
+- 修复实现：
+  - 短 key 改为全掩码 `****`。
+  - keyring 写/删失败后在当前 manager 内禁用 keyring 优先读取，避免 stale key 覆盖 `.env` fallback 或 clear 结果。
+  - `.env` 解析支持 `DEEPSEEK_API_KEY = value` 与 `export DEEPSEEK_API_KEY = value`，写入/清除时去重并保留无关变量。
+  - 测试 helper 参数类型改为 `KeyringBackend` Protocol。
+
+**修复后验证**：
+- `pytest tests/unit/test_credentials.py -v` → 12 passed
+- `pytest tests/unit/test_config.py tests/unit/test_llm_deepseek.py -q` → 91 passed
+- `mypy harness/credentials/manager.py` → Success
+- `git diff --check` → clean（仅 CRLF 工作区提示）
+
+### 最终验证
+
+| 检查项 | 命令 | 结果 |
+|---|---|---|
+| 目标测试 | `pytest tests/unit/test_credentials.py -v` | 12 passed |
+| 相关回归 | `pytest tests/unit/test_config.py tests/unit/test_llm_deepseek.py -q` | 91 passed |
+| 完整测试套件 | `pytest -q` | 32 failed, 735 passed, 3 skipped |
+| Lint | `ruff check harness/credentials/manager.py tests/unit/test_credentials.py` | 当前 Windows 环境未安装 `ruff`（command/module not found） |
+| 类型检查 | `mypy harness/credentials/manager.py` | Success: no issues found |
+| T17 touched-file 凭据扫描 | `rg -n "(sk-[A-Za-z0-9_-]{20,}\|AKIA[0-9A-Z]{16}\|BEGIN (RSA \|EC \|OPENSSH )?PRIVATE KEY)" harness/credentials tests/unit/test_credentials.py` | 无匹配（exit 1） |
+| 高置信凭据扫描 | `rg -n "(sk-[A-Za-z0-9_-]{20,}\|AKIA[0-9A-Z]{16}\|BEGIN (RSA \|EC \|OPENSSH )?PRIVATE KEY)" harness tests AGENT_LOG.md` | 仅既有 fake key 占位符 `FAKE_API_KEY = "sk-fake-test-key-not-real"` 与历史日志引用 |
+
+**完整测试失败说明**：
+- 失败不在 T17 修改范围内（T17 修改 `.gitignore`、`harness/credentials/*`、`tests/unit/test_credentials.py`、过程文档）。
+- Windows 当前基线的既有失败集中在：
+  - `harness/tools/file_ops.py` 使用 Windows 缺失的 `os.O_NOFOLLOW`；
+  - symlink 测试在 Windows 权限不足时报 `WinError 1314`；
+  - shell 测试使用 POSIX 命令 `pwd` / `sleep`；
+  - `RunTestsTool` 的 pytest JSON report 在 Windows 临时工作区场景未创建。
+
+**Commit hash**：`e34c611` (`refactor(T17): complete reviews and verification [subagent: Faraday/Carver; human: pending review]`)
+
+**人工干预**：
+- 用户要求后续使用中文，并说明 T16 已验证和 push，可继续下一任务。
+- Git staging/commit 因 `.git` 写入限制需要提升权限；用户/系统允许 `git add` / `git commit`。
+- 未 push、未 merge、未创建 PR；人工 review 仍 pending。
+
+**教训**：
+1. keyring 写入/删除失败不能只“降级写 `.env`”，还要避免同一 manager 继续读到旧 keyring 值。
+2. 掩码逻辑必须覆盖短 key 边界，不能只验证常见长 token。
+3. `.env` fallback 即使是轻量实现，也要支持常见 spacing/export 形式并保证替换/清除不产生重复有效 key。
