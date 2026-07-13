@@ -5,14 +5,14 @@ from pathlib import Path
 from typing import Any
 
 from harness.agent_loop import AgentResult
-from harness.cli import CLIDependencies, main
-from harness.models import Config, StopReason
+from harness.cli import CLIDependencies, build_tool_registry, main
+from harness.models import Action, Config, StopReason
 
 
 @dataclass
 class FakeCredentials:
-    key: str | None = "sk-test-key"
-    status_value: str = "sk-****...1234"
+    key: str | None = "fake-api-key"
+    status_value: str = "fake-****...1234"
 
     def __post_init__(self) -> None:
         self.calls: list[str] = []
@@ -65,7 +65,7 @@ def test_run_loads_config_and_invokes_agent_loop_with_requested_file(
         ["run", "implement the feature", "--config", str(config_path)],
         dependencies=CLIDependencies(
             load_config=load_config,
-            make_credentials=lambda: FakeCredentials(key="sk-live"),
+            make_credentials=lambda: FakeCredentials(key="fake-live-key"),
             make_agent_loop=make_agent_loop,
         ),
     )
@@ -73,7 +73,7 @@ def test_run_loads_config_and_invokes_agent_loop_with_requested_file(
     output = capsys.readouterr().out
     assert exit_code == 0
     assert loaded_paths == [config_path]
-    assert factory_inputs == [(config, "sk-live")]
+    assert factory_inputs == [(config, "fake-live-key")]
     assert agent_loop.requirements == ["implement the feature"]
     assert "PASS" in output
 
@@ -89,7 +89,7 @@ def test_run_uses_default_config_path_when_omitted(capsys: Any) -> None:
         ["run", "use defaults"],
         dependencies=CLIDependencies(
             load_config=load_config,
-            make_credentials=lambda: FakeCredentials(key="sk-live"),
+            make_credentials=lambda: FakeCredentials(key="fake-live-key"),
             make_agent_loop=lambda _config, _api_key: FakeAgentLoop(),
         ),
     )
@@ -124,7 +124,7 @@ def test_run_without_key_suggests_setup_and_does_not_load_config(
         ),
     )
 
-    output = capsys.readouterr().out
+    output = capsys.readouterr().err
     assert exit_code == 1
     assert "harness key setup" in output
     assert not load_called
@@ -132,7 +132,7 @@ def test_run_without_key_suggests_setup_and_does_not_load_config(
 
 
 def test_key_status_prints_masked_status(capsys: Any) -> None:
-    credentials = FakeCredentials(status_value="sk-****...1234")
+    credentials = FakeCredentials(status_value="fake-****...1234")
 
     exit_code = main(
         ["key", "status"],
@@ -145,8 +145,8 @@ def test_key_status_prints_masked_status(capsys: Any) -> None:
 
     output = capsys.readouterr().out
     assert exit_code == 0
-    assert "sk-****...1234" in output
-    assert "sk-test-key" not in output
+    assert "fake-****...1234" in output
+    assert "fake-api-key" not in output
     assert credentials.calls == ["status"]
 
 
@@ -166,3 +166,15 @@ def test_key_setup_update_and_clear_call_credential_manager(capsys: Any) -> None
 
     capsys.readouterr()
     assert credentials.calls == ["setup", "update", "clear"]
+
+
+def test_default_tool_registry_exposes_finish_tool(tmp_path: Path) -> None:
+    registry = build_tool_registry(Config(target_directory=str(tmp_path)))
+
+    finish_schemas = [
+        schema for schema in registry.get_schemas() if schema.get("name") == "finish"
+    ]
+    assert finish_schemas == [
+        {"name": "finish", "type": "object", "properties": {}, "required": []}
+    ]
+    assert registry.dispatch(Action(tool_name="finish", args={})).success is True

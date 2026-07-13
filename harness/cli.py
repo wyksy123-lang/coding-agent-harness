@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from importlib import import_module
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Any, Protocol, cast
 
-from harness.agent_loop import AgentResult
 from harness.config.loader import ConfigError, ConfigLoader
 from harness.credentials.manager import CredentialManager
 from harness.models import Config
@@ -24,27 +25,94 @@ class CredentialManagerProtocol(Protocol):
     def get_key(self) -> str | None: ...
 
 
+class AgentRunResultProtocol(Protocol):
+    @property
+    def status(self) -> object: ...
+
+    @property
+    def output_files(self) -> list[str]: ...
+
+
 class AgentLoopProtocol(Protocol):
-    def run(self, requirement: str) -> AgentResult: ...
+    def run(self, requirement: str) -> AgentRunResultProtocol: ...
 
 
 LoadConfig = Callable[[str | Path], Config]
 CredentialFactory = Callable[[], CredentialManagerProtocol]
 AgentLoopFactory = Callable[[Config, str], AgentLoopProtocol]
+ToolConstructor = Callable[..., object]
+
+
+class ToolRegistryProtocol(Protocol):
+    def register(self, tool: object) -> None: ...
+
+    def get_schemas(self) -> list[dict[str, Any]]: ...
+
+    def dispatch(self, action: object) -> Any: ...
+
+
+class _FinishTool:
+    @property
+    def name(self) -> str:
+        return "finish"
+
+    @property
+    def schema(self) -> dict[str, Any]:
+        return {"name": "finish", "type": "object", "properties": {}, "required": []}
+
+    def execute(self, args: dict[str, Any]) -> object:
+        tool_result = cast(
+            Callable[..., object],
+            getattr(import_module("harness.tools.base"), "ToolResult"),
+        )
+        return tool_result(success=True, output={})
+
+
+def _tool_class(module_name: str, class_name: str) -> ToolConstructor:
+    module = import_module(module_name)
+    return cast(ToolConstructor, getattr(module, class_name))
+
+
+def build_tool_registry(config: Config) -> ToolRegistryProtocol:
+    tool_registry = cast(
+        Callable[[Config], ToolRegistryProtocol],
+        getattr(import_module("harness.tools.base"), "ToolRegistry"),
+    )
+    write_file_tool = _tool_class("harness.tools.file_ops", "WriteFileTool")
+    read_file_tool = _tool_class("harness.tools.file_ops", "ReadFileTool")
+    list_files_tool = _tool_class("harness.tools.file_ops", "ListFilesTool")
+    run_command_tool = _tool_class("harness.tools.shell", "RunCommandTool")
+    run_tests_tool = _tool_class("harness.tools.shell", "RunTestsTool")
+
+    registry = tool_registry(config)
+    registry.register(write_file_tool(config.target_directory))
+    registry.register(read_file_tool(config.target_directory))
+    registry.register(list_files_tool(config.target_directory))
+    registry.register(
+        run_command_tool(
+            config.target_directory,
+            config.dangerous_command_patterns,
+            timeout=config.pytest_timeout,
+        )
+    )
+    registry.register(
+        run_tests_tool(
+            config.target_directory,
+            config.test_command,
+            pytest_timeout=config.pytest_timeout,
+        )
+    )
+    registry.register(_FinishTool())
+    return registry
 
 
 def _default_agent_loop_factory(config: Config, api_key: str) -> AgentLoopProtocol:
-    from harness.agent_loop import AgentLoop
     from harness.llm.deepseek import DeepSeekClient
-    from harness.tools import (
-        ListFilesTool,
-        ReadFileTool,
-        RunCommandTool,
-        RunTestsTool,
-        ToolRegistry,
-        WriteFileTool,
-    )
 
+    agent_loop = cast(
+        Callable[..., AgentLoopProtocol],
+        getattr(import_module("harness.agent_loop"), "AgentLoop"),
+    )
     llm_client = DeepSeekClient(
         api_key=api_key,
         model=config.model,
@@ -52,25 +120,7 @@ def _default_agent_loop_factory(config: Config, api_key: str) -> AgentLoopProtoc
         timeout=config.llm_timeout,
         retry_count=config.llm_retry_count,
     )
-    registry = ToolRegistry(config)
-    registry.register(WriteFileTool(config.target_directory))
-    registry.register(ReadFileTool(config.target_directory))
-    registry.register(ListFilesTool(config.target_directory))
-    registry.register(
-        RunCommandTool(
-            config.target_directory,
-            config.dangerous_command_patterns,
-            timeout=config.pytest_timeout,
-        )
-    )
-    registry.register(
-        RunTestsTool(
-            config.target_directory,
-            config.test_command,
-            pytest_timeout=config.pytest_timeout,
-        )
-    )
-    return AgentLoop(config, llm_client, registry)
+    return agent_loop(config, llm_client, cast(Any, build_tool_registry(config)))
 
 
 @dataclass(frozen=True)
@@ -118,24 +168,29 @@ def _handle_run(args: argparse.Namespace, dependencies: CLIDependencies) -> int:
     credentials = dependencies.make_credentials()
     api_key = credentials.get_key()
     if api_key is None:
-        print("API key not configured. Run `harness key setup`.")
+        print("API key not configured. Run `harness key setup`.", file=sys.stderr)
         return 1
 
     config_path = cast(str, args.config)
     try:
         config = dependencies.load_config(config_path)
     except ConfigError as exc:
-        print(f"Config error: {exc}")
+        print(f"Config error: {exc}", file=sys.stderr)
         return 2
 
     requirement = cast(str, args.requirement)
     result = dependencies.make_agent_loop(config, api_key).run(requirement)
-    print(f"status: {result.status.value}")
+    print(f"status: {_status_value(result.status)}")
     if result.output_files:
         print("output_files:")
         for output_file in result.output_files:
             print(f"- {output_file}")
     return 0
+
+
+def _status_value(status: object) -> str:
+    value = getattr(status, "value", status)
+    return str(value)
 
 
 def _handle_key(args: argparse.Namespace, dependencies: CLIDependencies) -> int:
