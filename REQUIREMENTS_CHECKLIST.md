@@ -37,7 +37,7 @@
 | R015 | 要求1 §4.2 | 每个功能有客观验收标准 | SPEC.md §10 | 检查每功能有可判定标准 | TODO（SPEC 已创建，待用户审查） | — |
 | R016 | 要求1 §4.3 | PLAN.md：每 task 可由一个 subagent 一次会话完成；含目标、涉及文件、实现要点、验证步骤（含将要写的失败测试） | PLAN.md | 审查 task 粒度与字段完整性 | DONE（T01 已验证可由 subagent 完成） | T01 |
 | R017 | 要求1 §4.3 | PLAN 显式标出 task 间依赖与可并行部分 | PLAN.md | 检查依赖标注 | DONE（依赖图 + 并行计划已存在） | — |
-| R018 | 要求1 §4.7 | PLAN.md 持续更新：每完成一个 task 即标记完成并附 commit hash | PLAN.md + git log | 审查 task 状态与 commit hash | IN PROGRESS（T01 + T02 + T03 + T04 + T05 + T06 + T07 + T08 + T09 + T10 + T11 + T12 + T13 + T14 已标记 ✅ DONE + commit hash） | T01-T29 |
+| R018 | 要求1 §4.7 | PLAN.md 持续更新：每完成一个 task 即标记完成并附 commit hash | PLAN.md + git log | 审查 task 状态与 commit hash | IN PROGRESS（T01-T17 已标记 ✅ DONE + commit hash） | T01-T29 |
 | R019 | 要求1 §4.4 | SPEC_PROCESS.md：brainstorming 关键节点、≥3 轮迭代、AI 建议采纳/推翻及理由、brainstorming 反思 | SPEC_PROCESS.md | 逐项检查 | TODO | — |
 | R020 | 要求1 §4.9 | AGENT_LOG.md：时间顺序，每条含时间戳、task 编号、Superpowers 技能、关键 prompt/context、subagent 输出/commit hash、人工干预、教训 | AGENT_LOG.md | 逐条检查字段完整性 | TODO | — |
 | R021 | 要求1 §五.4 | README.md 含：项目简介、安装、运行、分发命令、目录结构、安全边界说明 | README.md | 逐节检查 | TODO | — |
@@ -48,14 +48,14 @@
 
 | ID | 来源 | 义务 | 计划证据 | 验证方法 | 状态 | PLAN Task |
 |---|---|---|---|---|---|---|
-| R024 | 要求1 §3.1 | key 绝不硬编码进源码 | 源码扫描 | grep/secret scan | TODO | — |
-| R025 | 要求1 §3.1 | key 绝不提交进 Git（含历史） | git log 扫描 | git log -p 全历史扫描 | TODO | — |
-| R026 | 要求1 §3.1 | key 绝不写入日志/终端 history/明文配置文件 | 代码审查 | 检查无明文 key 输出 | TODO | — |
-| R027 | 要求1 §3.1 | 至少实现一种安全存储：OS 钥匙串/KMS/带主密码加密文件 | 源码实现 | 单测验证存储机制 | TODO | — |
-| R028 | 要求1 §3.1 | 环境变量通过 .env 加载而非命令行 export；须说明明文风险 | SPEC + README | 审查说明 | TODO | — |
-| R029 | 要求1 §3.1 | 首次运行引导用户安全录入 key（隐藏输入） | 源码实现 | 单测/手动验证 | TODO | — |
-| R030 | 要求1 §3.1 | 可查看/更新/清除 key（查看状态时不回显明文） | 源码实现 | 单测验证 | TODO | — |
-| R031 | 要求1 §3.1 + §4.2 | SPEC 安全节明确凭据威胁模型与对策 | SPEC.md | 审查威胁模型节 | TODO | — |
+| R024 | 要求1 §3.1 | key 绝不硬编码进源码 | 源码扫描 | grep/secret scan | DONE（T17 touched-file 高置信扫描无匹配；全仓仅既有 fake key 占位符） | T17 |
+| R025 | 要求1 §3.1 | key 绝不提交进 Git（含历史） | git log 扫描 | git log -p 全历史扫描 | IN PROGRESS（T17 未新增真实 key；最终全历史扫描留待收尾） | T17 |
+| R026 | 要求1 §3.1 | key 绝不写入日志/终端 history/明文配置文件 | 代码审查 | 检查无明文 key 输出 | DONE（T17 status/log tests 验证明文 key 不出现在状态或 warning 日志） | T17 |
+| R027 | 要求1 §3.1 | 至少实现一种安全存储：OS 钥匙串/KMS/带主密码加密文件 | 源码实现 | 单测验证存储机制 | DONE（T17 CredentialManager 默认使用 OS keyring，单测用 mock backend 验证） | T17 |
+| R028 | 要求1 §3.1 | 环境变量通过 .env 加载而非命令行 export；须说明明文风险 | SPEC + README | 审查说明 | IN PROGRESS（T17 实现 .env 降级并在 SPEC 标注明文风险；README 待 T27） | T17,T27 |
+| R029 | 要求1 §3.1 | 首次运行引导用户安全录入 key（隐藏输入） | 源码实现 | 单测/手动验证 | DONE（T17 setup/update 使用 getpass.getpass，单测 monkeypatch 验证路径） | T17 |
+| R030 | 要求1 §3.1 | 可查看/更新/清除 key（查看状态时不回显明文） | 源码实现 | 单测验证 | DONE（T17 覆盖 setup/status/update/clear/get_key、掩码和 stale keyring fallback） | T17 |
+| R031 | 要求1 §3.1 + §4.2 | SPEC 安全节明确凭据威胁模型与对策 | SPEC.md | 审查威胁模型节 | DONE（SPEC §4.2 已含 T1-T7 凭据威胁模型，T17 reviewer 复核） | T17 |
 
 ## D. 分发与部署
 
@@ -80,7 +80,7 @@
 | R043 | 要求2 A.4-B | 危险动作拦截 = 代码护栏（识别→拦截→要求人工确认），不是提示词 | 源码 | 单测验证确定性 | DONE（T09 PathGuard + T10 CommandGuard + T11 HITLState 均已实现） | T09-T11 |
 | R044 | 要求2 A.4-C | 每个核心机制（工具分发、治理拦截、反馈回灌、记忆读写、停机）替换 mock LLM 后仍能用确定性单测验证 | mock-LLM 单测 | 离线运行测试通过 | TODO | — |
 | R045 | 要求2 A.4-C | 配置文件/规则文件/技能/提示词文件属"内容物"，不计入 harness 实现 | SPEC 说明 | 审查不以此充数 | TODO | — |
-| R046 | 要求2 A.4-D | 六维度（决策/工具/记忆/治理/反馈/配置）都有可运行的最低实现 | 源码 | 各维度可运行验证 | IN PROGRESS（工具 T06-T08、治理 T09-T11、配置 T02、反馈 T12-T13/T15-T16、记忆 T14 已完成，决策待完成） | T01-T17 |
+| R046 | 要求2 A.4-D | 六维度（决策/工具/记忆/治理/反馈/配置）都有可运行的最低实现 | 源码 | 各维度可运行验证 | IN PROGRESS（工具 T06-T08、治理 T09-T11、配置 T02/T17、反馈 T12-T13/T15-T16、记忆 T14 已完成，决策待完成） | T01-T17 |
 | R047 | 要求2 A.4-D | 选择一个机制密集维度深入实现作为主要贡献 | SPEC + 源码 | 深度审查 | DONE（反馈闭环：T12 TestResultParser + T13 FailureClassifier + T14 MemoryRetriever/Recorder + T15 FeedbackInjector + T16 RoundTracker 已完成） | T12-T16 |
 | R048 | 要求2 A.4-D | 若以记忆为重点，存储与检索必须自己实现，不得直接接用框架 memory | 源码 | 代码审查 | DONE（T14 JSON memory store/retriever/recorder 自实现，未接入框架 memory） | T14 |
 | R049 | 要求2 A.3 | 必须设计四类机制：动作/工具、客观反馈信号、危险动作、记忆 | SPEC「领域与机制设计」 | 逐类检查 | TODO | — |
@@ -89,7 +89,7 @@
 
 | ID | 来源 | 义务 | 计划证据 | 验证方法 | 状态 | PLAN Task |
 |---|---|---|---|---|---|---|
-| R050 | 要求1 §3.4 | 至少 3 个职责清晰的功能模块 | 源码 + SPEC | 模块审查 | IN PROGRESS（配置 T02、LLM 抽象 T03-T05、工具 T06-T08、治理 T09-T11、反馈解析/分类 T12-T13、记忆 T14 — 已实现 6 个模块） | T01-T17 |
+| R050 | 要求1 §3.4 | 至少 3 个职责清晰的功能模块 | 源码 + SPEC | 模块审查 | IN PROGRESS（配置/凭据 T02/T17、LLM 抽象 T03-T05、工具 T06-T08、治理 T09-T11、反馈解析/分类 T12-T13、记忆 T14 — 已实现 7 个模块） | T01-T17 |
 | R051 | 要求1 §3.4 + §4.8 | 可一键运行的测试命令（make test 或等价），覆盖核心功能 | Makefile/等价 | 执行测试命令 | DONE（Makefile `make test` 已创建，150 tests pass） | T01 |
 | R052 | 要求1 §4.8 | CI（GitHub Actions）必须配置：每次 push 自动运行测试 | .github/workflows/ | push 后 CI 自动触发 | TODO | — |
 | R053 | 要求2 A.6 | harness 核心机制必须有用 mock/stub LLM 驱动的确定性单元测试，不依赖网络与真实 LLM | 单测代码 | 离线运行 mock-LLM 测试 | TODO | — |
