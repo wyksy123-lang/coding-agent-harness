@@ -34,7 +34,11 @@ class CredentialManager:
         self.service_name = service_name
         self.key_name = key_name
         self.env_file = Path(env_file)
-        self._keyring = keyring_backend if keyring_backend is not None else _load_keyring_backend()
+        if keyring_backend is None:
+            self._keyring = _load_keyring_backend()
+        else:
+            self._keyring = keyring_backend
+        self._ignore_keyring = False
 
     def setup(self) -> None:
         """Prompt for an API key and store it."""
@@ -72,6 +76,8 @@ class CredentialManager:
         self._write_env_key(key)
 
     def _get_keyring_key(self) -> str | None:
+        if self._ignore_keyring:
+            return None
         if self._keyring is None:
             logger.warning("Keyring backend unavailable; using .env fallback.")
             return None
@@ -88,6 +94,7 @@ class CredentialManager:
         try:
             self._keyring.set_password(self.service_name, self.key_name, key)
         except Exception:
+            self._ignore_keyring = True
             logger.warning("Keyring write failed; storing key in .env fallback.")
             return False
         return True
@@ -99,6 +106,7 @@ class CredentialManager:
         try:
             self._keyring.delete_password(self.service_name, self.key_name)
         except Exception:
+            self._ignore_keyring = True
             logger.warning("Keyring delete failed or key was absent; clearing .env fallback.")
 
     def _read_env_key(self) -> str | None:
@@ -108,8 +116,11 @@ class CredentialManager:
             stripped = line.strip()
             if not stripped or stripped.startswith("#"):
                 continue
-            name, separator, value = stripped.partition("=")
-            if separator and name == self.key_name:
+            assignment = _parse_env_assignment(line)
+            if assignment is None:
+                continue
+            name, value = assignment
+            if name == self.key_name:
                 return value
         return None
 
@@ -133,8 +144,8 @@ class CredentialManager:
             return []
         kept_lines: list[str] = []
         for line in self.env_file.read_text(encoding="utf-8").splitlines():
-            name, separator, _value = line.strip().partition("=")
-            if separator and name == self.key_name:
+            assignment = _parse_env_assignment(line)
+            if assignment is not None and assignment[0] == self.key_name:
                 continue
             kept_lines.append(line)
         return kept_lines
@@ -147,7 +158,19 @@ def _load_keyring_backend() -> KeyringBackend | None:
         return None
 
 
+def _parse_env_assignment(line: str) -> tuple[str, str] | None:
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#"):
+        return None
+    if stripped.startswith("export "):
+        stripped = stripped.removeprefix("export ").lstrip()
+    name, separator, value = stripped.partition("=")
+    if not separator:
+        return None
+    return name.strip(), value.strip()
+
+
 def _mask_key(key: str) -> str:
-    if len(key) < 7:
+    if len(key) <= 12:
         return "****"
     return f"{key[:3]}****...{key[-4:]}"
