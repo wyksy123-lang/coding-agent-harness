@@ -3208,3 +3208,122 @@
 1. CLI 默认装配也需要测试，不只测试参数解析；否则真实工具面缺口容易被 fake AgentLoop 掩盖。
 2. 为了让目标 mypy 聚焦当前文件，可以用运行时加载隔离既有平台类型问题，但必须用测试覆盖真实装配结果。
 3. 测试里的 fake key 也应避免真实供应商 token 形态，减少扫描噪音和日志误读。
+
+---
+
+## LOG-046 — T20 FastAPI 应用 + WebSocket
+
+**时间**：2026-07-13  
+**执行环境**：Windows Codex 当前 checkout（未创建嵌套 worktree）  
+**Worktree**：`C:\Users\裴斐\Documents\coding-agent-harness-codex`  
+**Branch**：`codex/task/T20-fastapi`  
+**Base main**：`6cb7c1f` (`Merge pull request #24 from wyksy123-lang/codex/task/T19-cli`)  
+**Task**：T20 — FastAPI 应用 + WebSocket
+
+**接管 / 同步记录**：
+- 用户说明 T19 已验证并 push，可继续下一任务。
+- `git status --short --branch` 显示 clean `main...origin/main`；`git log` 确认 `main` / `origin/main` 位于 T19 merge commit `6cb7c1f`。
+- 从最新 `main` 创建 `codex/task/T20-fastapi`；本轮只执行 T20，未 push、未 merge、未开始 T21。
+
+### Red 阶段
+
+**subagent 信息**：
+- 名称：Archimedes
+- Agent ID：`019f5bfa-a1bb-7fd0-9e36-9eeca5b0ce88`
+- 任务：只读分析 T20 WebUI 后端需求、AgentLoop/HITL 现有接口和最小可测 FastAPI/WebSocket 设计。
+- 结果：建议实现 `create_app(state)`、`GET /`、`GET /api/status`、`POST /api/hitl/{request_id}`、`/ws`；通过 `WebUIState` 做可测试状态源；WebSocket 需主动推送状态并对 HITL 参数做脱敏。
+
+**Red 执行内容**：
+- 新增 `tests/unit/test_webui_app.py`。
+- 覆盖 HTML 根页面、状态 JSON、WebSocket 初始状态、HITL approve、非法 decision。
+
+**Red 验证**：
+- 命令：`pytest tests/unit/test_webui_app.py -v`
+- 初次环境观察：当前 Anaconda Python 未安装 FastAPI；安装 `fastapi uvicorn websockets` 后重新运行。
+- 失败原因：`ModuleNotFoundError: No module named 'webui'`
+- 判定：失败由目标 `webui` 模块缺失导致，非语法、测试自身或依赖错误。
+
+**Commit hash**：`5009627` (`test(T20): add failing webui tests [subagent: Archimedes; human: pending review]`)
+
+### Green 阶段
+
+**执行者**：Codex 主 agent
+
+**执行内容**：
+- 新增 `webui/__init__.py`、`webui/app.py`、`webui/websocket.py`。
+- 实现 FastAPI 应用工厂、HTML 根页面、状态快照 API、HITL approve/deny API、WebSocket `/ws` 初始状态与 ping 响应。
+- 用 `WebUIState` 持有 phase、round、test_status、failure_type、strategy、stop_reason 与 `HITLState`。
+
+**Green 验证**：
+- `pytest tests/unit/test_webui_app.py -v` → 5 passed, 1 warning
+- `pytest tests/unit/test_hitl.py -v` → 79 passed
+- `pytest tests/unit/test_agent_loop.py -v` → 8 passed
+- `python -m py_compile webui/app.py webui/websocket.py tests/unit/test_webui_app.py` → passed
+
+**Commit hash**：`5236758` (`feat(T20): implement minimal FastAPI webui [subagent: Archimedes; human: pending review]`)
+
+### Refactor / Review 阶段
+
+**Specification Compliance Review**：
+- Reviewer：Aquinas
+- Agent ID：`019f5c01-3e9b-76c0-9054-0b9034b2e8b5`
+- 输入：T20 diff、PLAN.md T20、SPEC WebUI/HITL/安全要求。
+- 结果：Critical 1、Major 1、Minor 1。
+- Critical：WebSocket 只发送初始快照/响应客户端消息，未实现连接后的实时状态主动推送。
+- Major：pending HITL 序列化返回原始 `Action.args`，可能暴露路径或凭据。
+
+**Code Quality Review**：
+- Reviewer：Dewey
+- Agent ID：`019f5c01-6e22-7841-a5c1-5c16caa0f69d`
+- 输入：当前 T20 diff，重点审查 `webui/app.py`、`webui/websocket.py`、`tests/unit/test_webui_app.py`。
+- 结果：Critical 1、Major 4、Minor 1。
+- Critical：WebSocket 无订阅/广播机制，不满足实时推送。
+- Major：HTTP JSON parse error 未处理；`update_status()` 省略 failure_type 时会清空既有值；stop_reason 无法清空；WebSocket malformed JSON 未显式响应。
+
+**Review fix / Refactor 内容**：
+- 增加 WebSocket subscription queue；`WebUIState.update_status()`、`decide_hitl()`、`create_hitl_request()` 会向已连接客户端广播状态。
+- 增加敏感字段/路径/高置信 key 形态脱敏，HITL pending action args 不直接暴露敏感值。
+- `update_status()` 改为 sentinel 语义：省略 `failure_type` 时保留既有值，显式 `None` 或 `clear_*` 才清空。
+- WebSocket 支持 malformed JSON error 响应，HTTP HITL API 对非法 JSON body 返回 400。
+- 增加测试覆盖实时状态推送、HITL pending 推送、ping、malformed JSON、deny、unknown request、非法 JSON body、脱敏和状态保留/清空。
+
+**修复后验证**：
+- `pytest tests/unit/test_webui_app.py -v` → 15 passed, 1 warning
+- `pytest tests/unit/test_hitl.py tests/unit/test_agent_loop.py -q` → 87 passed
+- `mypy webui/app.py` → Success: no issues found in 1 source file
+- `python -m ruff check webui/ tests/unit/test_webui_app.py` → All checks passed
+- `git diff --check` → clean（仅 CRLF 工作区提示）
+- T20 touched-file 高置信凭据扫描：`rg -n "(sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY)" webui tests\unit\test_webui_app.py` → 无匹配
+- T20 broad credential scan：`rg -n "api_key|api-key|token|secret|password|sk-|AKIA|PRIVATE KEY" webui tests\unit\test_webui_app.py` → 仅脱敏规则和 fake 测试字符串
+
+### 最终验证
+
+| 检查项 | 命令 | 结果 |
+|---|---|---|
+| 目标测试 | `pytest tests/unit/test_webui_app.py -v` | 15 passed, 1 warning |
+| 相关回归 | `pytest tests/unit/test_hitl.py tests/unit/test_agent_loop.py -q` | 87 passed |
+| 完整测试套件 | `pytest` | 32 failed, 764 passed, 3 skipped, 1 warning |
+| Lint | `python -m ruff check webui/ tests/unit/test_webui_app.py` | All checks passed |
+| 类型检查 | `mypy webui/app.py` | Success: no issues found in 1 source file |
+| 凭据扫描 | 见上方 touched-file scans | 无真实凭据 |
+
+**完整测试失败说明**：
+- 失败不在 T20 修改范围内（T20 修改 `webui/*` 与 `tests/unit/test_webui_app.py`）。
+- Windows 当前基线既有失败集中在：
+  - `harness/tools/file_ops.py` 使用 Windows 缺失的 `os.O_NOFOLLOW`；
+  - symlink 测试在 Windows 权限不足时报 `WinError 1314`；
+  - shell 测试使用 POSIX 命令 `pwd` / `sleep`；
+  - `RunTestsTool` 的 pytest JSON report 在 Windows 临时工作区场景未创建。
+
+**Commit hash**：`e8776ea` (`refactor(T20): complete webui reviews and verification [subagent: Aquinas-Dewey; human: pending review]`)
+
+**人工干预**：
+- 用户要求继续后续任务，并说明 T19 已验证和 push。
+- 安装依赖：为当前 Anaconda Python 安装 `fastapi uvicorn websockets`；随后按用户说明补装/确认 `ruff`，并安装 `ruff` 到当前解释器 user site。
+- Git staging/commit 因 `.git` 写入限制需要提升权限；已用于本地 `git add` / `git commit`。
+- 未 push、未 merge、未创建 PR；人工 review 仍 pending。
+
+**教训**：
+1. WebSocket “可连接”不等于“实时推送”；T20 需要连接后由状态源主动广播，测试也要覆盖连接后的异步更新。
+2. WebUI 是展示边界，但 HITL action args 仍可能包含路径或凭据形态；任何展示前都应先脱敏。
+3. 状态更新 API 的省略语义要清楚区分“保持原值”和“显式清空”，否则 UI 可能丢失失败上下文。
