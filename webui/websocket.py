@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+import json
+import re
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -8,9 +11,46 @@ from fastapi import WebSocket, WebSocketDisconnect
 from harness.governance.hitl import HITLState
 from harness.models import Action, HITLRequest
 
+_UNSET = object()
+_SENSITIVE_NAME_RE = re.compile(r"(api[_-]?key|token|secret|password)", re.IGNORECASE)
+_HIGH_CONFIDENCE_SECRET_RE = re.compile(
+    r"(sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY)"
+)
+
+
+@dataclass(frozen=True)
+class _Subscription:
+    loop: asyncio.AbstractEventLoop
+    queue: asyncio.Queue[dict[str, Any]]
+
+
+def _redact_value(name: str, value: Any) -> Any:
+    if _SENSITIVE_NAME_RE.search(name):
+        return "[redacted]"
+    if isinstance(value, str):
+        if (
+            ".env" in value
+            or "C:\\Users\\" in value
+            or value.startswith("/")
+            or _HIGH_CONFIDENCE_SECRET_RE.search(value)
+        ):
+            return "[redacted]"
+        return value
+    if isinstance(value, dict):
+        return {str(key): _redact_value(str(key), item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_redact_value(name, item) for item in value]
+    return value
+
 
 def _serialize_action(action: Action) -> dict[str, Any]:
-    return {"tool_name": action.tool_name, "args": dict(action.args)}
+    return {
+        "tool_name": action.tool_name,
+        "args": {
+            str(name): _redact_value(str(name), value)
+            for name, value in action.args.items()
+        },
+    }
 
 
 def _serialize_hitl_request(request: HITLRequest) -> dict[str, Any]:
@@ -31,6 +71,7 @@ class WebUIState:
     strategy: str = ""
     stop_reason: str | None = None
     hitl_state: HITLState = field(default_factory=HITLState)
+    _subscriptions: list[_Subscription] = field(default_factory=list, init=False)
 
     def update_status(
         self,
@@ -38,9 +79,11 @@ class WebUIState:
         phase: str | None = None,
         round_number: int | None = None,
         test_status: str | None = None,
-        failure_type: str | None = None,
+        failure_type: str | None | object = _UNSET,
         strategy: str | None = None,
         stop_reason: str | None = None,
+        clear_failure_type: bool = False,
+        clear_stop_reason: bool = False,
     ) -> None:
         if phase is not None:
             self.phase = phase
@@ -48,11 +91,17 @@ class WebUIState:
             self.round_number = round_number
         if test_status is not None:
             self.test_status = test_status
-        self.failure_type = failure_type
+        if failure_type is not _UNSET:
+            self.failure_type = failure_type if isinstance(failure_type, str) else None
+        elif clear_failure_type:
+            self.failure_type = None
         if strategy is not None:
             self.strategy = strategy
         if stop_reason is not None:
             self.stop_reason = stop_reason
+        elif clear_stop_reason:
+            self.stop_reason = None
+        self._broadcast_status()
 
     def snapshot(self) -> dict[str, Any]:
         return {
@@ -71,10 +120,37 @@ class WebUIState:
     def decide_hitl(self, request_id: str, decision: str) -> HITLRequest:
         normalized = decision.lower()
         if normalized in {"approve", "approved"}:
-            return self.hitl_state.approve(request_id)
+            request = self.hitl_state.approve(request_id)
+            self._broadcast_status()
+            return request
         if normalized in {"deny", "denied"}:
-            return self.hitl_state.deny(request_id)
+            request = self.hitl_state.deny(request_id)
+            self._broadcast_status()
+            return request
         raise ValueError("decision must be approve or deny")
+
+    def create_hitl_request(self, action: Action, timeout: int) -> HITLRequest:
+        request = self.hitl_state.create(action, timeout)
+        self._broadcast_status()
+        return request
+
+    def subscribe(self) -> _Subscription:
+        subscription = _Subscription(
+            loop=asyncio.get_running_loop(),
+            queue=asyncio.Queue(),
+        )
+        self._subscriptions.append(subscription)
+        subscription.queue.put_nowait(_status_message(self.snapshot()))
+        return subscription
+
+    def unsubscribe(self, subscription: _Subscription) -> None:
+        if subscription in self._subscriptions:
+            self._subscriptions.remove(subscription)
+
+    def _broadcast_status(self) -> None:
+        message = _status_message(self.snapshot())
+        for subscription in list(self._subscriptions):
+            subscription.loop.call_soon_threadsafe(subscription.queue.put_nowait, message)
 
 
 class WebSocketStatusEndpoint:
@@ -83,16 +159,40 @@ class WebSocketStatusEndpoint:
 
     async def handle(self, websocket: WebSocket) -> None:
         await websocket.accept()
-        await self._send_status(websocket)
+        subscription = self._state.subscribe()
         try:
             while True:
-                message = await websocket.receive_json()
-                if isinstance(message, dict) and message.get("type") == "ping":
-                    await websocket.send_json({"type": "pong"})
-                else:
-                    await self._send_status(websocket)
+                queue_task = asyncio.create_task(subscription.queue.get())
+                receive_task = asyncio.create_task(websocket.receive_json())
+                done, pending = await asyncio.wait(
+                    {queue_task, receive_task},
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                for task in pending:
+                    task.cancel()
+
+                if queue_task in done:
+                    await websocket.send_json(queue_task.result())
+                if receive_task in done:
+                    try:
+                        client_message = receive_task.result()
+                    except json.JSONDecodeError:
+                        await websocket.send_json(
+                            {"type": "error", "detail": "invalid json message"}
+                        )
+                        continue
+                    if (
+                        isinstance(client_message, dict)
+                        and client_message.get("type") == "ping"
+                    ):
+                        await websocket.send_json({"type": "pong"})
+                    else:
+                        await websocket.send_json(_status_message(self._state.snapshot()))
         except WebSocketDisconnect:
             return
+        finally:
+            self._state.unsubscribe(subscription)
 
-    async def _send_status(self, websocket: WebSocket) -> None:
-        await websocket.send_json({"type": "status", "status": self._state.snapshot()})
+
+def _status_message(status: dict[str, Any]) -> dict[str, Any]:
+    return {"type": "status", "status": status}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket
@@ -37,7 +38,10 @@ def create_app(state: WebUIState | None = None) -> FastAPI:
 
     @app.post("/api/hitl/{request_id}")
     async def decide_hitl(request_id: str, request: Request) -> dict[str, str]:
-        payload = await request.json()
+        try:
+            payload = await request.json()
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=400, detail="invalid json body") from exc
         if not isinstance(payload, dict):
             raise HTTPException(status_code=400, detail="decision is required")
         decision = payload.get("decision")
