@@ -2534,7 +2534,10 @@
 - Reviewer subagent：Mendel
 - Agent ID：`019f5ad4-82ac-7b31-8dd0-b79054523142`
 - 输入：T14 文件、PLAN.md T14、SPEC.md（如可用），要求只返回 Critical spec issues。
-- 结果：已发起，但在本轮短等待窗口内未返回；未虚构通过结论。
+- 初始结果：Critical issue 1 个。
+- Critical：`MemoryRetriever._read_memory()` 使用 `read_text()` 和 `json.loads()` 全量读取/解析 memory file，不满足 T14 / SPEC 对 retrieval “非全量载入”的要求。
+- 修复：新增回归测试 `test_retrieve_relevant_does_not_read_entire_memory_file`，先确认旧实现因调用 `Path.read_text` 失败；随后将 `retrieve_relevant` 改为按块扫描 `failure_history` 并逐条 `JSONDecoder.raw_decode`，达到 limit 后停止读取。
+- 修复提交：`9a9ab97` (`fix(T14): stream memory retrieval after review [subagent: Mendel; human: pending review]`)
 
 **Code Quality Review**：
 - Reviewer subagent：Dirac
@@ -2543,16 +2546,16 @@
 - 结果：`Critical quality issues: none.`
 
 **本地审查结论**：
-- Spec：T14 计划要求的 JSON 读取、failure_type 过滤、limit 截断、get_conventions、record append、缺失/空/非法 JSON 容错均已覆盖。
+- Spec：Mendel 指出的非全量载入 Critical 已修复；T14 计划要求的 JSON 读取、failure_type 过滤、limit 截断、get_conventions、record append、缺失/空/非法 JSON 容错均已覆盖。
 - Quality：实现保持最小范围，未引入真实 LLM/网络依赖，未接入第三方 agent/memory 框架；Dirac reviewer 返回 0 Critical。
-- 因 Spec reviewer subagent 未返回，本轮记录为 Spec reviewer attempted + local Spec review，无 Critical 修复项。
+- 所有已返回 Critical 均已修复。
 
 ### 最终验证
 
 | 检查项 | 命令 | 结果 |
 |---|---|---|
-| 目标测试 | `pytest tests/unit/test_memory.py -q -p no:cacheprovider --basetemp=...pytest-tmp-t14-final-target` | 12 passed |
-| 完整测试套件 | `pytest tests/ -q -p no:cacheprovider --basetemp=...pytest-tmp-t14-final-full` | 32 failed, 699 passed, 3 skipped |
+| 目标测试 | `pytest tests/unit/test_memory.py -q -p no:cacheprovider --basetemp=...pytest-tmp-t14-final2-target` | 13 passed |
+| 完整测试套件 | `pytest tests/ -q -p no:cacheprovider --basetemp=...pytest-tmp-t14-final2-full` | 32 failed, 700 passed, 3 skipped |
 | Lint | `ruff check harness/memory/retriever.py tests/unit/test_memory.py` / `python -m ruff ...` | 当前 Windows 环境未安装 ruff（command/module not found） |
 | 类型检查 | `mypy harness/memory/retriever.py` | Success: no issues found |
 | 凭据扫描 | `rg -n '(sk-[A-Za-z0-9_-]{20,}\|AKIA[0-9A-Z]{16})' harness/memory tests/unit/test_memory.py` | 无匹配（exit 1） |
@@ -2564,7 +2567,7 @@
   - symlink 测试在 Windows 权限不足时报 `WinError 1314`；
   - shell 测试使用 POSIX 命令或依赖 pytest JSON report 场景。
 
-**Commit hash**：`24b81b0` (`refactor(T14): complete reviews and verification [subagent: reviewer-attempted; human: pending review]`)
+**Commit hash**：`24b81b0` (`refactor(T14): complete reviews and verification [subagent: reviewer-attempted; human: pending review]`), `9a9ab97` (`fix(T14): stream memory retrieval after review [subagent: Mendel; human: pending review]`)
 
 **人工干预**：
 - 用户要求继续完成 T14，并尽可能减少核验 token 消耗、加快整体速度。
@@ -2572,5 +2575,5 @@
 
 **教训**：
 1. Windows managed worktree 的 Git 元数据写入仍需要提升权限；代码文件编辑可在 worktree 中完成。
-2. reviewer subagent 若因平台状态迟迟不返回，必须记录 attempted/no result，不得伪造 approval。
+2. reviewer subagent 若延迟返回，必须在收到真实结果后补记并修复 Critical，不得伪造 approval。
 3. 对后续小 task，可继续使用目标测试 + 精简全量摘要 + 必要静态检查，避免重复打印长失败栈。
