@@ -72,15 +72,15 @@
 
 | ID | 来源 | 义务 | 计划证据 | 验证方法 | 状态 | PLAN Task |
 |---|---|---|---|---|---|---|
-| R038 | 要求2 A.4-A | 必须自己实现 agent 主循环（组织上下文→调用 LLM→解析动作→分发执行→回灌结果→停机判断） | 源码 | 代码审查 + 单测 | TODO | — |
+| R038 | 要求2 A.4-A | 必须自己实现 agent 主循环（组织上下文→调用 LLM→解析动作→分发执行→回灌结果→停机判断） | 源码 | 代码审查 + 单测 | DONE（T18 AgentLoop 自实现，覆盖 LLM→工具→反馈→停机） | T18 |
 | R039 | 要求2 A.4-A | 必须有可注入 mock 的 LLM 抽象层（可替换 mock 离线测试，也可接真实供应商） | 源码 | mock-LLM 单测通过 | DONE（T03 LLMClient ABC + T04 MockLLMClient + T05 DeepSeekClient 均已实现） | T03-T05 |
 | R040 | 要求2 A.4-A | 允许使用底层零件（LLM 供应商单次对话 API、HTTP 库、向量库、解析库） | SPEC 说明 | 审查选型 | TODO | — |
 | R041 | 要求2 A.4-A | 不允许建在现成 agent 编排框架高层循环之上（LangChain AgentExecutor、AutoGen、CrewAI、LlamaIndex agent、编码智能体 SDK agent runner） | 源码 + SPEC | 依赖审查无禁止框架 | TODO | — |
 | R042 | 要求2 A.4-B | 反馈信号 = 代码校验器/传感器（解析产物→客观判定→回灌），不是提示词 | 源码 | 单测验证确定性 | DONE（T12 TestResultParser、T13 FailureClassifier、T15 FeedbackInjector、T16 RoundTracker 均已完成） | T12-T16 |
 | R043 | 要求2 A.4-B | 危险动作拦截 = 代码护栏（识别→拦截→要求人工确认），不是提示词 | 源码 | 单测验证确定性 | DONE（T09 PathGuard + T10 CommandGuard + T11 HITLState 均已实现） | T09-T11 |
-| R044 | 要求2 A.4-C | 每个核心机制（工具分发、治理拦截、反馈回灌、记忆读写、停机）替换 mock LLM 后仍能用确定性单测验证 | mock-LLM 单测 | 离线运行测试通过 | TODO | — |
+| R044 | 要求2 A.4-C | 每个核心机制（工具分发、治理拦截、反馈回灌、记忆读写、停机）替换 mock LLM 后仍能用确定性单测验证 | mock-LLM 单测 | 离线运行测试通过 | IN PROGRESS（T18 用 SequencedLLM/stub tools 离线覆盖工具分发、治理拒绝反馈、反馈回灌、记忆记录和停机；T22 继续做机制演示级 mock LLM 单测） | T18,T22 |
 | R045 | 要求2 A.4-C | 配置文件/规则文件/技能/提示词文件属"内容物"，不计入 harness 实现 | SPEC 说明 | 审查不以此充数 | TODO | — |
-| R046 | 要求2 A.4-D | 六维度（决策/工具/记忆/治理/反馈/配置）都有可运行的最低实现 | 源码 | 各维度可运行验证 | IN PROGRESS（工具 T06-T08、治理 T09-T11、配置 T02/T17、反馈 T12-T13/T15-T16、记忆 T14 已完成，决策待完成） | T01-T17 |
+| R046 | 要求2 A.4-D | 六维度（决策/工具/记忆/治理/反馈/配置）都有可运行的最低实现 | 源码 | 各维度可运行验证 | DONE（决策 T18、工具 T06-T08、治理 T09-T11、配置 T02/T17、反馈 T12-T13/T15-T16、记忆 T14 均有最低可运行实现） | T01-T18 |
 | R047 | 要求2 A.4-D | 选择一个机制密集维度深入实现作为主要贡献 | SPEC + 源码 | 深度审查 | DONE（反馈闭环：T12 TestResultParser + T13 FailureClassifier + T14 MemoryRetriever/Recorder + T15 FeedbackInjector + T16 RoundTracker 已完成） | T12-T16 |
 | R048 | 要求2 A.4-D | 若以记忆为重点，存储与检索必须自己实现，不得直接接用框架 memory | 源码 | 代码审查 | DONE（T14 JSON memory store/retriever/recorder 自实现，未接入框架 memory） | T14 |
 | R049 | 要求2 A.3 | 必须设计四类机制：动作/工具、客观反馈信号、危险动作、记忆 | SPEC「领域与机制设计」 | 逐类检查 | TODO | — |
@@ -92,7 +92,7 @@
 | R050 | 要求1 §3.4 | 至少 3 个职责清晰的功能模块 | 源码 + SPEC | 模块审查 | IN PROGRESS（配置/凭据 T02/T17、LLM 抽象 T03-T05、工具 T06-T08、治理 T09-T11、反馈解析/分类 T12-T13、记忆 T14 — 已实现 7 个模块） | T01-T17 |
 | R051 | 要求1 §3.4 + §4.8 | 可一键运行的测试命令（make test 或等价），覆盖核心功能 | Makefile/等价 | 执行测试命令 | DONE（Makefile `make test` 已创建，150 tests pass） | T01 |
 | R052 | 要求1 §4.8 | CI（GitHub Actions）必须配置：每次 push 自动运行测试 | .github/workflows/ | push 后 CI 自动触发 | TODO | — |
-| R053 | 要求2 A.6 | harness 核心机制必须有用 mock/stub LLM 驱动的确定性单元测试，不依赖网络与真实 LLM | 单测代码 | 离线运行 mock-LLM 测试 | TODO | — |
+| R053 | 要求2 A.6 | harness 核心机制必须有用 mock/stub LLM 驱动的确定性单元测试，不依赖网络与真实 LLM | 单测代码 | 离线运行 mock-LLM 测试 | IN PROGRESS（T18 AgentLoop 单测使用 SequencedLLM/stub tools；T22 继续扩展专门 mock-LLM 验证） | T18,T22 |
 | R054 | 要求2 A.6 | 机制演示：mock LLM 下确定性地复现 ① 治理护栏拦截危险动作 ② 注入失败→反馈闭环使 agent 改变下一步 ③ 重点维度的一个确定性行为 | 演示脚本/测试 | 运行演示 | TODO | — |
 
 ## G. CI/CD 与仓库
@@ -239,7 +239,7 @@
 | R043 | T09-T11 | 治理=代码 |
 | R044 | T22 | mock-LLM 确定性单测 |
 | R045 | SPEC.md §5.3 | 内容物不计入 |
-| R046 | T02,T06-T08,T09-T11,T12-T16,T17 | 六维度最低 |
+| R046 | T02,T06-T08,T09-T11,T12-T16,T17,T18 | 六维度最低 |
 | R047 | T12-T16 | 反馈闭环深入 |
 | R048 | T14 | 记忆自实现 |
 | R049 | SPEC.md §9 | 四类机制 |

@@ -2954,3 +2954,135 @@
 1. keyring 写入/删除失败不能只“降级写 `.env`”，还要避免同一 manager 继续读到旧 keyring 值。
 2. 掩码逻辑必须覆盖短 key 边界，不能只验证常见长 token。
 3. `.env` fallback 即使是轻量实现，也要支持常见 spacing/export 形式并保证替换/清除不产生重复有效 key。
+
+---
+
+## LOG-044 — T18 AgentLoop
+
+**时间**：2026-07-13  
+**执行环境**：Windows Codex 当前 checkout（未创建嵌套 worktree）  
+**Worktree**：`C:\Users\裴斐\Documents\coding-agent-harness-codex`  
+**Branch**：`codex/task/T18-agent-loop`  
+**Base main**：`38b4c60` (`Merge pull request #22 from wyksy123-lang/codex/task/T17-credential-manager`)  
+**Task**：T18 — AgentLoop 主循环
+
+**接管 / 同步记录**：
+- 用户说明 T17 已验证并 push，可继续后续任务。
+- `git status --short --branch` 显示 clean `main...origin/main`；`git log` 确认 T17 merge commit `38b4c60` 位于 `main` / `origin/main`。
+- 从最新 main 创建 `codex/task/T18-agent-loop`；本轮只执行 T18，未 push、未 merge、未开始 T19。
+
+### Red 阶段
+
+**subagent 信息**：
+- 名称：Ptolemy
+- Agent ID：`019f5b9b-7606-7430-8c2d-dbeb39bb2388`
+- 任务：只做 T18 implementation-prep，不编辑文件；读取 PLAN/SPEC 和现有 LLM、ToolRegistry、反馈、治理、记忆、凭据模块接口。
+- 结果：建议最小 API 为 `AgentResult(status, rounds, output_files)` 与 `AgentLoop(config, llm_client, tool_registry, ...)`；用 SequencedLLM/stub tools 离线测试 PASS/MAX_ROUNDS/STUCK/HITL/LLM retry；`run_tests` 读取 report_path 后交给 `TestResultParser`。
+
+**Red 执行内容**：
+- 新增 `tests/unit/test_agent_loop.py`。
+- 覆盖失败测试回灌到下一轮后 PASS、MAX_ROUNDS、STUCK、治理 PENDING/HITL 拒绝、LLM 失败 retry。
+- 所有测试使用本地 fake LLM、fake Tool 和临时 JSON report，不使用真实网络、真实 LLM 或真实凭据。
+
+**Red 验证**：
+- 命令：`pytest tests/unit/test_agent_loop.py -v`
+- 退出状态码：`1`
+- 关键失败原因：`ModuleNotFoundError: No module named 'harness.agent_loop'`
+- 判定：失败由目标模块缺失导致，非语法、依赖或测试自身错误。
+
+**Commit hash**：`ed438bc` (`test(T18): add failing agent loop tests [subagent: Ptolemy; human: pending review]`)
+
+### Green 阶段
+
+**执行者**：Codex 主 agent
+
+**执行内容**：
+- 新增 `harness/agent_loop.py`。
+- 实现 `AgentResult` 与 `AgentLoop.run()` 最小主循环：
+  - 初始化 system/user messages。
+  - 调用 `LLMClient.chat()` 并按 `llm_retry_count + 1` 尝试。
+  - 将 `ToolCall` 转为 `Action`，通过 `ToolRegistry.dispatch()` 分发。
+  - 对 `run_tests` 读取 `report_path` 并用 `TestResultParser` 解析，再经 `FailureClassifier`、`FeedbackInjector`、`RoundTracker` 回灌反馈和判定停机。
+  - 返回 `AgentResult(status, rounds, output_files)`。
+
+**Green 验证**：
+- `pytest tests/unit/test_agent_loop.py -v` → 5 passed
+- `pytest tests/unit/test_agent_loop.py tests/unit/test_tracker.py tests/unit/test_injector.py tests/unit/test_parser.py tests/unit/test_classifier.py tests/unit/test_tool_registry.py -q` → 198 passed
+- `mypy harness/agent_loop.py` → 仅既有 `harness/tools/file_ops.py` Windows `os.O_NOFOLLOW` 类型错误；T18 文件无新增类型错误
+- `ruff check harness/agent_loop.py tests/unit/test_agent_loop.py` → 当前 Windows 环境未安装 `ruff`（command not found）
+
+**Commit hash**：`21d9972` (`feat(T18): implement minimal agent loop [subagent: Ptolemy; human: pending review]`)
+
+### Refactor / Review 阶段
+
+**Specification Compliance Review**：
+- Reviewer：Carson
+- Agent ID：`019f5ba2-d7dd-7c82-b82f-5916fabd8979`
+- 输入：Base `38b4c60`，Head `21d9972`，PLAN.md T18、SPEC AgentLoop/数据流/反馈/治理/记忆/配置要求。
+- 结果：Critical 2 个、Important 3 个、Minor 1 个。
+- Critical：
+  1. 无 `tool_calls` 被直接当作 PASS，可能跳过测试与 finish。
+  2. PENDING governance 结果未集成 `HITLState`，也没有拒绝反馈后 resume 的路径。
+- Important：
+  1. 未通过 `MemoryRecorder` 记录 round outcome。
+  2. `output_files` 在 write_file 成功前记录。
+  3. `ToolRegistry.get_schemas()` 未按 enabled_tools 过滤（保留给后续接口改进；dispatch 仍会拒绝 disabled tool）。
+
+**Code Quality Review**：
+- Reviewer：Ramanujan
+- Agent ID：`019f5ba2-ebf5-7230-990a-ea9ecb2df7f9`
+- 输入：同一 base/head，重点审查 `harness/agent_loop.py` 和 `tests/unit/test_agent_loop.py`。
+- 结果：Critical 1 个、Important 3 个、Minor 2 个。
+- Critical：无 tool_calls 直接 PASS。
+- Important：工具 dispatch 失败无反馈；`output_files` 成功前记录；HITL final-round 边界。
+
+**Review fix 过程**：
+- 新增先失败的测试：
+  - `test_run_does_not_treat_missing_tool_calls_as_pass`
+  - `test_tool_dispatch_failure_is_fed_back_to_next_round`
+  - `test_output_files_include_only_successful_writes`
+  - HITL 测试改为拒绝后反馈下一轮并最终 PASS
+- 修复实现：
+  - 无 tool calls 记录 FAIL，追加 `llm_no_tool_calls` feedback，不再当作 PASS。
+  - PENDING 工具结果通过 `HITLState.create()` + `deny()` 建立状态转换，记录 HITL_DENIED round，追加拒绝反馈并继续下一轮。
+  - 工具 dispatch 失败追加 `tool_error` feedback 给下一轮。
+  - `write_file` 只有在工具成功后才进入 `output_files`。
+  - 默认接入 `MemoryRecorder(config.memory_file)` 记录 round outcome。
+
+**修复后验证**：
+- `pytest tests/unit/test_agent_loop.py -v` → 8 passed
+- `pytest tests/unit/test_agent_loop.py tests/unit/test_tracker.py tests/unit/test_injector.py tests/unit/test_parser.py tests/unit/test_classifier.py tests/unit/test_tool_registry.py tests/unit/test_hitl.py -q` → 280 passed
+- `python -m py_compile harness/agent_loop.py tests/unit/test_agent_loop.py` → passed
+- `git diff --check` → clean（仅 CRLF 工作区提示）
+
+### 最终验证
+
+| 检查项 | 命令 | 结果 |
+|---|---|---|
+| 目标测试 | `pytest tests/unit/test_agent_loop.py -v` | 8 passed |
+| 相关回归 | `pytest tests/unit/test_agent_loop.py tests/unit/test_tracker.py tests/unit/test_injector.py tests/unit/test_parser.py tests/unit/test_classifier.py tests/unit/test_tool_registry.py tests/unit/test_hitl.py -q` | 280 passed |
+| 完整测试套件 | `pytest -q` | 32 failed, 743 passed, 3 skipped |
+| Lint | `ruff check harness/agent_loop.py tests/unit/test_agent_loop.py` | 当前 Windows 环境未安装 `ruff`（command not found） |
+| 类型检查 | `mypy harness/agent_loop.py` | 仅既有 `harness/tools/file_ops.py` Windows `os.O_NOFOLLOW` attr-defined 错误；T18 文件无新增 mypy 错误 |
+| 编译检查 | `python -m py_compile harness/agent_loop.py tests/unit/test_agent_loop.py` | passed |
+| T18 touched-file 凭据扫描 | `rg -n "(sk-[A-Za-z0-9_-]{20,}\|AKIA[0-9A-Z]{16}\|BEGIN (RSA \|EC \|OPENSSH )?PRIVATE KEY)" harness/agent_loop.py tests/unit/test_agent_loop.py` | 无匹配（exit 1） |
+
+**完整测试失败说明**：
+- 失败不在 T18 修改范围内（T18 修改 `harness/agent_loop.py`、`tests/unit/test_agent_loop.py`、过程文档）。
+- Windows 当前基线的既有失败集中在：
+  - `harness/tools/file_ops.py` 使用 Windows 缺失的 `os.O_NOFOLLOW`；
+  - symlink 测试在 Windows 权限不足时报 `WinError 1314`；
+  - shell 测试使用 POSIX 命令 `pwd` / `sleep`；
+  - `RunTestsTool` 的 pytest JSON report 在 Windows 临时工作区场景未创建。
+
+**Commit hash**：`c964704` (`refactor(T18): complete reviews and verification [subagent: Carson/Ramanujan; human: pending review]`)
+
+**人工干预**：
+- 用户要求继续后续任务，并说明 T17 已验证和 push。
+- Git staging/commit 因 `.git` 写入限制需要提升权限；用户/系统允许 `git add` / `git commit`。
+- 未 push、未 merge、未创建 PR；人工 review 仍 pending。
+
+**教训**：
+1. 主循环不能把“模型没有动作”当作成功；成功必须来自明确的测试 PASS 或 finish 信号。
+2. HITL 拒绝在 AgentLoop 中既是治理事件，也应成为下一轮可见反馈，否则 agent 无法修正策略。
+3. 集成层要小心记录结果的时机，`output_files` 这类产物只能在工具成功后记录。
