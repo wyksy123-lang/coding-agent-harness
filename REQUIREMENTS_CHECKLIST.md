@@ -76,12 +76,12 @@
 | R039 | 要求2 A.4-A | 必须有可注入 mock 的 LLM 抽象层（可替换 mock 离线测试，也可接真实供应商） | 源码 | mock-LLM 单测通过 | DONE（T03 LLMClient ABC + T04 MockLLMClient + T05 DeepSeekClient 均已实现） | T03-T05 |
 | R040 | 要求2 A.4-A | 允许使用底层零件（LLM 供应商单次对话 API、HTTP 库、向量库、解析库） | SPEC 说明 | 审查选型 | TODO | — |
 | R041 | 要求2 A.4-A | 不允许建在现成 agent 编排框架高层循环之上（LangChain AgentExecutor、AutoGen、CrewAI、LlamaIndex agent、编码智能体 SDK agent runner） | 源码 + SPEC | 依赖审查无禁止框架 | TODO | — |
-| R042 | 要求2 A.4-B | 反馈信号 = 代码校验器/传感器（解析产物→客观判定→回灌），不是提示词 | 源码 | 单测验证确定性 | IN PROGRESS（T12 TestResultParser、T13 FailureClassifier、T15 FeedbackInjector 已完成；T16 RoundTracker 待完成） | T12-T16 |
+| R042 | 要求2 A.4-B | 反馈信号 = 代码校验器/传感器（解析产物→客观判定→回灌），不是提示词 | 源码 | 单测验证确定性 | DONE（T12 TestResultParser、T13 FailureClassifier、T15 FeedbackInjector、T16 RoundTracker 均已完成） | T12-T16 |
 | R043 | 要求2 A.4-B | 危险动作拦截 = 代码护栏（识别→拦截→要求人工确认），不是提示词 | 源码 | 单测验证确定性 | DONE（T09 PathGuard + T10 CommandGuard + T11 HITLState 均已实现） | T09-T11 |
 | R044 | 要求2 A.4-C | 每个核心机制（工具分发、治理拦截、反馈回灌、记忆读写、停机）替换 mock LLM 后仍能用确定性单测验证 | mock-LLM 单测 | 离线运行测试通过 | TODO | — |
 | R045 | 要求2 A.4-C | 配置文件/规则文件/技能/提示词文件属"内容物"，不计入 harness 实现 | SPEC 说明 | 审查不以此充数 | TODO | — |
-| R046 | 要求2 A.4-D | 六维度（决策/工具/记忆/治理/反馈/配置）都有可运行的最低实现 | 源码 | 各维度可运行验证 | IN PROGRESS（工具 T06-T08、治理 T09-T11、配置 T02、反馈 T12-T13/T15、记忆 T14 已完成，决策待完成） | T01-T17 |
-| R047 | 要求2 A.4-D | 选择一个机制密集维度深入实现作为主要贡献 | SPEC + 源码 | 深度审查 | IN PROGRESS（反馈闭环：T12 TestResultParser + T13 FailureClassifier + T14 MemoryRetriever/Recorder + T15 FeedbackInjector 已完成，T16 待完成） | T12-T16 |
+| R046 | 要求2 A.4-D | 六维度（决策/工具/记忆/治理/反馈/配置）都有可运行的最低实现 | 源码 | 各维度可运行验证 | IN PROGRESS（工具 T06-T08、治理 T09-T11、配置 T02、反馈 T12-T13/T15-T16、记忆 T14 已完成，决策待完成） | T01-T17 |
+| R047 | 要求2 A.4-D | 选择一个机制密集维度深入实现作为主要贡献 | SPEC + 源码 | 深度审查 | DONE（反馈闭环：T12 TestResultParser + T13 FailureClassifier + T14 MemoryRetriever/Recorder + T15 FeedbackInjector + T16 RoundTracker 已完成） | T12-T16 |
 | R048 | 要求2 A.4-D | 若以记忆为重点，存储与检索必须自己实现，不得直接接用框架 memory | 源码 | 代码审查 | DONE（T14 JSON memory store/retriever/recorder 自实现，未接入框架 memory） | T14 |
 | R049 | 要求2 A.3 | 必须设计四类机制：动作/工具、客观反馈信号、危险动作、记忆 | SPEC「领域与机制设计」 | 逐类检查 | TODO | — |
 
