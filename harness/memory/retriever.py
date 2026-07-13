@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from harness.models import FailureType, MemoryEntry, RoundOutcome, RoundRecord
 
@@ -19,13 +19,12 @@ class MemoryRetriever:
     def retrieve_relevant(
         self, failure_type: str | FailureType, limit: int = 3
     ) -> list[MemoryEntry]:
-        data = self._read_memory()
-        if not data:
+        if limit <= 0 or not self.memory_file.exists():
             return []
 
         target_type = _normalize_failure_type(failure_type)
         entries: list[MemoryEntry] = []
-        for item in data.get("failure_history", []):
+        for item in _iter_failure_history(self.memory_file):
             entry = _entry_from_mapping(item)
             if entry is not None and entry.failure_type == target_type:
                 entries.append(entry)
@@ -100,6 +99,99 @@ def _entry_from_mapping(item: Any) -> MemoryEntry | None:
         strategy_used=str(item.get("strategy_used", "")),
         outcome=str(item.get("outcome", "unresolved")),
     )
+
+
+def _iter_failure_history(memory_file: Path) -> Iterator[Any]:
+    decoder = json.JSONDecoder()
+    buffer = ""
+    position = 0
+    in_history = False
+    chunk_size = 4096
+
+    try:
+        with memory_file.open("r", encoding="utf-8") as stream:
+            while True:
+                if not in_history:
+                    while '"failure_history"' not in buffer:
+                        chunk = stream.read(chunk_size)
+                        if chunk == "":
+                            return
+                        buffer += chunk
+                    position = buffer.index('"failure_history"') + len(
+                        '"failure_history"'
+                    )
+
+                    while True:
+                        position = _skip_whitespace(buffer, position)
+                        if position >= len(buffer):
+                            chunk = stream.read(chunk_size)
+                            if chunk == "":
+                                return
+                            buffer += chunk
+                            continue
+                        if buffer[position] != ":":
+                            return
+                        position += 1
+                        break
+
+                    while True:
+                        position = _skip_whitespace(buffer, position)
+                        if position >= len(buffer):
+                            chunk = stream.read(chunk_size)
+                            if chunk == "":
+                                return
+                            buffer += chunk
+                            continue
+                        if buffer[position] != "[":
+                            return
+                        position += 1
+                        in_history = True
+                        break
+
+                position = _skip_array_separator(buffer, position)
+                while position >= len(buffer):
+                    chunk = stream.read(chunk_size)
+                    if chunk == "":
+                        return
+                    buffer += chunk
+                    position = _skip_array_separator(buffer, position)
+
+                if buffer[position] == "]":
+                    return
+
+                while True:
+                    try:
+                        item, next_position = decoder.raw_decode(buffer, position)
+                    except json.JSONDecodeError:
+                        chunk = stream.read(chunk_size)
+                        if chunk == "":
+                            logger.warning("Failed to read memory file %s", memory_file)
+                            return
+                        buffer += chunk
+                        continue
+
+                    yield item
+                    position = next_position
+                    if position > chunk_size:
+                        buffer = buffer[position:]
+                        position = 0
+                    break
+    except OSError as exc:
+        logger.warning("Failed to read memory file %s: %s", memory_file, exc)
+
+
+def _skip_whitespace(buffer: str, position: int) -> int:
+    while position < len(buffer) and buffer[position].isspace():
+        position += 1
+    return position
+
+
+def _skip_array_separator(buffer: str, position: int) -> int:
+    while position < len(buffer) and (
+        buffer[position].isspace() or buffer[position] == ","
+    ):
+        position += 1
+    return position
 
 
 def _entry_from_round(round_record: RoundRecord) -> dict[str, Any]:

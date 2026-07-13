@@ -113,6 +113,42 @@ class TestMemoryRetriever:
         assert len(results) < 5
         assert all(entry.failure_type == FailureType.ASSERTION for entry in results)
 
+    def test_retrieve_relevant_does_not_read_entire_memory_file(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        memory_file = tmp_path / "memory.json"
+        _write_memory(
+            memory_file,
+            {
+                "failure_history": [
+                    _entry(session_id="s1", round_number=1, failure_type="ASSERTION"),
+                    *[
+                        _entry(
+                            session_id=f"noise-{index}",
+                            round_number=index,
+                            failure_type="IMPORT",
+                        )
+                        for index in range(2, 100)
+                    ],
+                ]
+            },
+        )
+
+        original_read_text = Path.read_text
+
+        def fail_on_full_read(path: Path, *args, **kwargs):
+            if path == memory_file:
+                raise AssertionError("retrieve_relevant must not full-load memory")
+            return original_read_text(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", fail_on_full_read)
+
+        results = MemoryRetriever(memory_file).retrieve_relevant("ASSERTION", limit=1)
+
+        assert [entry.session_id for entry in results] == ["s1"]
+
     def test_get_conventions_returns_project_conventions(self, tmp_path: Path):
         memory_file = tmp_path / "memory.json"
         conventions = {"test_style": "pytest", "no_network": True}
