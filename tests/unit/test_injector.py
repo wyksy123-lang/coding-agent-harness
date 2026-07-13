@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import pytest
 
+import harness.feedback as feedback
+
 from harness.feedback.injector import FeedbackInjector
 from harness.models import Failure, FailureType, MemoryEntry, TestResult
 
@@ -31,6 +33,10 @@ EXPECTED_STRATEGY_HINTS = {
         "errors."
     ),
 }
+
+
+def test_feedback_package_exports_injector():
+    assert feedback.FeedbackInjector is FeedbackInjector
 
 
 class RecordingMemory:
@@ -158,3 +164,22 @@ def test_long_feedback_details_are_bounded():
 
     assert len(feedback.details) <= 1200
     assert feedback.details.endswith("...")
+
+
+def test_bounded_details_preserve_required_fields_when_expected_is_long():
+    failure = _failure()
+    failure.expected = "expected value " * 200
+    failure.actual = "actual value"
+
+    feedback = FeedbackInjector.inject(
+        _test_result(failure),
+        FailureType.ASSERTION,
+        RecordingMemory([]),
+    )
+
+    assert len(feedback.details) <= 1200
+    assert "test: tests/test_sample.py::test_example" in feedback.details
+    assert "location: tests/test_sample.py:12" in feedback.details
+    assert "expected: expected value" in feedback.details
+    assert "actual: actual value" in feedback.details
+    assert "message: AssertionError: assert 1 == 2" in feedback.details
