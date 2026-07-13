@@ -1,0 +1,45 @@
+{
+  "created": 1.7,
+  "duration": 0.06,
+  "exitcode": 1,
+  "root": "/tmp/tests",
+  "summary": {
+    "passed": 1,
+    "failed": 1,
+    "total": 2,
+    "collected": 2
+  },
+  "tests": [
+    {
+      "nodeid": "test_import.py::test_pass",
+      "outcome": "passed",
+      "duration": 0.01,
+      "call": {
+        "duration": 0.01,
+        "outcome": "passed"
+      }
+    },
+    {
+      "nodeid": "test_import.py::test_import_error",
+      "outcome": "failed",
+      "duration": 0.02,
+      "call": {
+        "duration": 0.02,
+        "outcome": "failed",
+        "crash": {
+          "path": "/tmp/test_import.py",
+          "lineno": 5,
+          "message": "ModuleNotFoundError: No module named 'nonexistent_module_xyz'"
+        },
+        "traceback": [
+          {
+            "path": "/tmp/test_import.py",
+            "lineno": 5,
+            "message": "ModuleNotFoundError"
+          }
+        ],
+        "longrepr": "def test_import_error():\n>       import nonexistent_module_xyz\nE       ModuleNotFoundError: No module named 'nonexistent_module_xyz'"
+      }
+    }
+  ]
+}
