@@ -580,7 +580,7 @@ T29 (final acceptance) ← depends on all
 11. **对应 worktree 和 PR 范围**: `feature/feedback` / PR6
 12. **完成状态及 commit hash 记录位置**: 本文件 T16 行；AGENT_LOG.md
 
-**状态**: ⬜ TODO | **Commit**: —
+**状态**: ✅ DONE | **Commit**: 46ff206 (Red), 868aeee (Green), 39251c4 (Review)
 
 ---
 

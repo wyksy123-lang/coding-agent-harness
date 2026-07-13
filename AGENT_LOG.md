@@ -2707,3 +2707,124 @@
 1. 对结构化反馈做长度限制时，应优先限制字段值而不是直接截断整段文本，否则会破坏必需字段。
 2. 即使功能文件可直接导入，也要保持 package-level export 与已有模块一致，避免调用方接口不稳定。
 3. Windows 环境下 full-suite 的既有 POSIX 假设仍会失败；本轮按 T15 范围记录而不越界修复。
+
+---
+
+## LOG-042 — T16 RoundTracker
+
+**时间**：2026-07-13  
+**执行环境**：Windows Codex 当前 checkout（未创建嵌套 worktree）  
+**Worktree**：`C:\Users\裴斐\Documents\coding-agent-harness-codex`  
+**Branch**：`codex/task/T16-round-tracker`  
+**Base main**：`a7c9c22` (`Merge pull request #20 from wyksy123-lang/codex/task/T15-feedback-injector`)  
+**Task**：T16 — RoundTracker（轮次追踪 + 卡死检测 + 停机判断）
+
+**接管 / 同步记录**：
+- 用户说明 T15 已验证并 push，可继续下一个任务。
+- `git status --short --branch` 显示 `main...origin/main` clean；`git log` 显示 T15 merge commit `a7c9c22` 位于 `main` / `origin/main`。
+- 从当前 checkout 的 `main` 创建任务分支 `codex/task/T16-round-tracker`；未 push、未 merge、未修改 `main`。
+
+### Red 阶段
+
+**subagent 信息**：
+- 名称：Godel
+- Agent ID：`019f5b49-ef0f-7b52-b083-04675a0033ec`
+- 任务：只做 T16 implementation-prep，不编辑文件；读取 T16 PLAN/SPEC 与现有 models/feedback 包，报告 API、停机优先级、测试点和潜在坑。
+- 结果：建议复用 `RoundRecord` / `RoundOutcome` / `StopReason` / `Failure`；`should_stop()` 按 SPEC 顺序 PASS → MAX_ROUNDS → STUCK → HITL_DENIED → None；空指纹不触发 STUCK。
+
+**Red 执行内容**：
+- 主 agent 创建 `tests/unit/test_tracker.py`。
+- 覆盖 package export、`update()` history、PASS、MAX_ROUNDS、STUCK、非连续不 STUCK、HITL_DENIED、继续 None、failure fingerprint 稳定性。
+
+**Red 验证**：
+- 命令：`pytest tests/unit/test_tracker.py -v`
+- 退出状态码：`1`
+- 关键失败原因：`ModuleNotFoundError: No module named 'harness.feedback.tracker'`
+- 判定：失败由目标模块缺失导致；pytest 正常收集到导入阶段，不是语法、依赖或测试自身错误。
+
+**Commit hash**：`46ff206` (`test(T16): add failing tracker tests [subagent: Godel; human: pending review]`)
+
+### Green 阶段
+
+**执行者**：Codex 主 agent
+
+**执行内容**：
+- 新增 `harness/feedback/tracker.py`。
+- 更新 `harness/feedback/__init__.py` 导出 `RoundTracker`。
+- 实现：
+  - `RoundTracker(max_rounds, stuck_threshold)` 保存 history。
+  - `update(round_record)` 追加历史。
+  - `detect_loop()` 检查最近 `stuck_threshold` 条同一非空 `failure_fingerprint`。
+  - `should_stop()` 按 SPEC 顺序返回 PASS / MAX_ROUNDS / STUCK / HITL_DENIED / None。
+  - 初版 `failure_fingerprint(failure)` 返回 `type|test_name|sha256(message)`。
+
+**Green 验证**：
+- `pytest tests/unit/test_tracker.py -v` → 9 passed
+- `pytest tests/unit/test_parser.py tests/unit/test_classifier.py tests/unit/test_injector.py tests/unit/test_tracker.py -v` → 122 passed
+
+**Commit hash**：`868aeee` (`feat(T16): implement minimal round tracker [subagent: Codex; human: pending review]`)
+
+### Refactor / Review 阶段
+
+**Specification Compliance Review**：
+- Reviewer：Beauvoir
+- Agent ID：`019f5b4d-95fa-7383-af86-244dfa90d736`
+- 输入：Base `a7c9c22`，Head `868aeee`，PLAN.md T16 与 SPEC.md RoundTracker 要求。
+- 结果：无 Critical / Important；Minor 1 个。
+- Minor：缺少“连续空 `failure_fingerprint` 不触发 STUCK”的测试。实现已处理空值，但测试未覆盖。
+
+**Code Quality Review**：
+- Reviewer：Kuhn
+- Agent ID：`019f5b4d-ded4-7672-84c7-b55d551e97bf`
+- 输入：同一 base/head，T16 文件与测试。
+- 结果：无 Critical；Important 1 个。
+- Important：`failure_fingerprint()` 只保留 message hash，但 T14 `MemoryRecorder` 将 fingerprint 第三段当可读 failure message 存储；后续 T18 若使用此 helper，会让记忆中的 message 变成 64 位 hash。
+
+**Review fix 过程**：
+- 先添加失败测试：
+  - `test_empty_fingerprints_do_not_trigger_stuck`
+  - `test_failure_fingerprint_is_deterministic_and_keeps_readable_message`
+  - `test_failure_fingerprint_truncates_long_message_but_keeps_hash`
+- 修复前验证：`pytest tests/unit/test_tracker.py -v` → 2 failed, 9 passed，失败是 hash-only fingerprint 不保留可读 message。
+- 修复实现：
+  - `failure_fingerprint()` 改为 `type|test_name|<message excerpt> [sha256:<hash>]`。
+  - 长 message 摘要限制为 220 字符，同时保留完整 message 的 sha256 以区分同前缀失败。
+  - 保持 T14 `MemoryRecorder` 的 `split("|", 2)` 可读 message 兼容性。
+- 修复后验证：
+  - `pytest tests/unit/test_tracker.py -v` → 11 passed
+  - `pytest tests/unit/test_parser.py tests/unit/test_classifier.py tests/unit/test_injector.py tests/unit/test_memory.py tests/unit/test_tracker.py -v` → 137 passed
+  - `mypy harness/feedback/tracker.py` → Success
+  - `git diff --check` → clean
+
+### 最终验证
+
+| 检查项 | 命令 | 结果 |
+|---|---|---|
+| 目标测试 | `pytest tests/unit/test_tracker.py -v` | 11 passed |
+| 相关回归 | `pytest tests/unit/test_parser.py tests/unit/test_classifier.py tests/unit/test_injector.py tests/unit/test_memory.py tests/unit/test_tracker.py -v` | 137 passed |
+| 完整测试套件 | `pytest -q` | 32 failed, 723 passed, 3 skipped |
+| Lint | `ruff check harness/feedback/tracker.py tests/unit/test_tracker.py` | 当前 Windows 环境未安装 ruff（command/module not found） |
+| 类型检查 | `mypy harness/feedback/tracker.py` | Success: no issues found |
+| touched-file 凭据扫描 | `rg -n "api_key\|secret\|password\|token\|sk-" harness/feedback/tracker.py harness/feedback/__init__.py tests/unit/test_tracker.py` | 无匹配（exit 1） |
+| 高置信凭据扫描 | `rg -n "(sk-[A-Za-z0-9_-]{20,}\|AKIA[0-9A-Z]{16})" harness tests AGENT_LOG.md` | 仅既有 fake key 占位符 `FAKE_API_KEY = "sk-fake-test-key-not-real"` 与历史日志引用 |
+| Git 历史高置信扫描 | `git log --all -p \| Select-String -Pattern "sk-[A-Za-z0-9_-]{20,}\|AKIA[0-9A-Z]{16}"` | 仅既有 fake key 占位符与历史日志引用 |
+
+**完整测试失败说明**：
+- 失败不在 T16 修改范围内（T16 修改 `harness/feedback/__init__.py`、`harness/feedback/tracker.py`、`tests/unit/test_tracker.py`）。
+- Windows 当前基线的既有失败集中在：
+  - `harness/tools/file_ops.py` 使用 Windows 缺失的 `os.O_NOFOLLOW`；
+  - symlink 测试在 Windows 权限不足时报 `WinError 1314`；
+  - shell 测试使用 POSIX 命令 `pwd` / `sleep`；
+  - `RunTestsTool` 的 pytest JSON report 在 Windows 临时工作区场景未创建。
+
+**Commit hash**：`39251c4` (`refactor(T16): complete reviews and verification [subagent: Beauvoir/Kuhn; human: pending review]`)
+
+**人工干预**：
+- 用户要求后续使用中文，并说明 T15 已验证和 push，可继续下一个任务。
+- Git staging/commit 因 `.git` 写入限制需要提升权限；用户/系统允许 `git add` / `git commit`。
+- 未 push、未 merge、未创建 PR；人工 review 仍 pending。
+
+**教训**：
+1. 纯状态机也要检查与既有模块的隐式数据契约；T16 fingerprint 会被 T14 memory recorder 解析。
+2. 指纹既要利于卡死检测，也要保留足够可读信息给记忆和反馈闭环使用。
+3. 小范围 reviewer 仍有效发现了跨模块契约问题，值得在后续 T18 agent loop 接线前保留。
