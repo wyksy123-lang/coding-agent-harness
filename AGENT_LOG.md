@@ -2334,3 +2334,145 @@
 3. SPEC §3.3.2 分类顺序为 ASSERTION → SYNTAX → IMPORT → RUNTIME。当消息同时包含多个错误类型特征时，顺序决定分类结果。实现应与 SPEC 顺序一致。
 4. `_classify()` 在 parser 中的存在不可避免——Failure dataclass 的 type 字段是必填项，parser 必须设一个值。T13 将作为独立公共分类器提供权威分类。这是"字段契约"与"模块职责分离"之间的合理权衡。
 5. 统一 collector 分类使用 `_classify()` 消除了两条不同分类路径之间的不一致，使代码更易于维护，并确保分类规则单一来源。
+
+---
+
+## LOG-039 — OpenCode → Codex 接管审计 + TASK-13
+
+**时间戳**：2026-07-13
+
+**Task 编号**：TASK-13（FailureClassifier 失败分类器）
+
+**工具切换记录**：
+- 开发最初由 OpenCode 执行；由于上一模型 API quota 耗尽，本轮从 `main` 上的 Codex handoff commit 后由 Codex Desktop 接管。
+- 本轮所有 T13 工作均由 Codex 完成，不描述为 OpenCode 工作。
+- 运行环境为 Windows 原生 PowerShell；当前 worktree 是 Codex Desktop managed worktree，未创建嵌套 worktree。
+
+**接管审计**：
+- 仓库根目录：`C:/Users/裴斐/.codex/worktrees/47de/coding-agent-harness-codex`
+- worktree 路径：`C:/Users/裴斐/.codex/worktrees/47de/coding-agent-harness-codex`
+- HEAD / main / origin/main / FETCH_HEAD：`0a45f0975572f75c115649dadeb37ee14a92e51d`
+- 基线：`0a45f09`（Merge pull request #16 from `chore/codex-handoff`）
+- 分支：`codex/task/T13-failure-classifier`
+- 初始 `git status`：detached HEAD 且 clean；随后仅在当前 managed worktree 创建任务分支。
+- 根据 `PLAN.md`、`AGENT_LOG.md` 和 Git 历史，T01-T12 已合并到 `main`；第一个 TODO 且依赖满足的任务为 T13（依赖 T01、T12）。
+
+**触发的 Superpowers / workflow 技能**：
+- `using-superpowers`
+- `using-git-worktrees`（仅检测已有 managed worktree，不创建嵌套 worktree）
+- `test-driven-development`
+- `subagent-driven-development`
+- `receiving-code-review`
+- `systematic-debugging`
+- `verification-before-completion`
+
+### Red 阶段
+
+**subagent 信息**：
+- 角色：implementation-preparation worker
+- 名称：Hooke
+- Agent ID：`019f5a01-d817-7342-9c31-a202107192bd`
+- 关键 prompt/context：只读取 T13 相关上下文，只允许创建 `tests/unit/test_classifier.py`，禁止创建 `harness/feedback/classifier.py`、禁止提交。
+
+**subagent 执行内容**：
+- 创建 `tests/unit/test_classifier.py`。
+- 覆盖 `FailureClassifier.classify(failure: Failure) -> FailureType` 的六类分类：ASSERTION、SYNTAX、IMPORT、RUNTIME、TIMEOUT、COLLECTION。
+- 覆盖默认 RUNTIME 和空消息 RUNTIME。
+
+**Red 验证**：
+- 命令：`pytest tests/unit/test_classifier.py -v`
+- 退出状态码：`1`
+- 关键失败原因：`ModuleNotFoundError: No module named 'harness.feedback.classifier'`
+- 判定：失败由目标模块缺失导致；测试文件被 pytest 正常收集到导入阶段，不是语法、环境、依赖或测试自身错误。
+
+**Commit hash**：`8753677` (`test(T13): add failing tests [subagent: Hooke; human: pending review]`)
+
+### Green 阶段
+
+**执行者**：Codex（主 agent；Green 范围小且顺序阻塞，未另派并行 worker）
+
+**执行内容**：
+- 创建 `harness/feedback/classifier.py`。
+- 更新 `harness/feedback/__init__.py` 导出 `FailureClassifier`。
+- 按 SPEC §3.3.2 实现消息模式匹配，无法匹配时默认 `FailureType.RUNTIME`。
+
+**Green 验证**：
+- `pytest tests/unit/test_classifier.py -v` → 11 passed
+- `pytest tests/unit/test_parser.py -v` → 87 passed（T12 反馈解析回归）
+
+**Commit hash**：`53c81cc` (`feat(T13): implement minimal green solution [subagent: Codex; human: pending review]`)
+
+### Refactor / Review 阶段
+
+**Specification Compliance Review**：
+- Reviewer：Zeno
+- Agent ID：`019f5a0d-122a-7553-9f9d-9f661ee472bb`
+- 输入：`PLAN.md` T13、`SPEC.md` §3.3.2、相关模型定义、review package `.superpowers/sdd/review-0a45f09..53c81cc.diff`
+- 结果：SPEC APPROVED
+- Critical/Major/Minor：无
+- Reviewer 运行：`pytest tests/unit/test_classifier.py -v` → 11 passed
+
+**Code Quality Review**：
+- Reviewer：Rawls
+- Agent ID：`019f5a0d-763d-7f53-962d-ca81f546e4c9`
+- 输入：同一 review package + `harness/feedback/parser.py` / `tests/unit/test_parser.py` 风格参考
+- 初次结果：QUALITY CHANGES REQUIRED
+- Critical：宽泛 `"assert"` 匹配先于 `SyntaxError`，会把 `SyntaxError: ... assert = 1` 误分为 ASSERTION。
+- Major：`Failure(message=None, ...)` 会抛 `TypeError`，应安全默认。
+- Minor：存在弱存在性测试；`TestResultParser._classify` 与 `FailureClassifier.classify` 有重复但不阻塞。
+
+**Review fix 过程**：
+- 先添加失败测试：
+  - `test_syntax_error_with_assert_source_line_returns_syntax`
+  - `test_assertion_error_still_returns_assertion_when_message_mentions_syntax`
+  - `test_none_message_defaults_to_runtime`
+- 修复前验证：`pytest tests/unit/test_classifier.py -v` → 2 failed, 12 passed，失败正是 review 指出的 precedence 和 `None` 问题。
+- 修复实现：
+  - 非字符串 `failure.message` 归一为空字符串。
+  - `AssertionError` 保持优先。
+  - `SyntaxError` / `IndentationError`、IMPORT、TIMEOUT、COLLECTION 等更具体规则先于裸 `assert`。
+  - 裸 `assert` 使用 `\bassert\b` 正则匹配。
+- 修复后验证：
+  - `pytest tests/unit/test_classifier.py -v` → 14 passed
+  - `pytest tests/unit/test_parser.py -q` → 87 passed
+  - `mypy harness/feedback/classifier.py` → Success
+
+**Re-review**：
+- Reviewer：Rawls
+- 输入：`.superpowers/sdd/review-0a45f09..working-tree-T13-quality-fix.diff`
+- 结果：QUALITY APPROVED
+- 结论：prior Critical 和 Major 均已解决，无新增 Critical。
+
+### 最终验证
+
+| 检查项 | 命令 | 结果 |
+|---|---|---|
+| 目标测试 | `pytest tests/unit/test_classifier.py -v` | 14 passed |
+| 相关回归 | `pytest tests/unit/test_parser.py -q` | 87 passed |
+| 完整测试套件 | `pytest tests/ -q` | 32 failed, 687 passed, 3 skipped |
+| Lint | `.cache/ruff/bin/ruff.exe check harness/ tests/` | All checks passed |
+| T13 类型检查 | `mypy harness/feedback/classifier.py` | Success |
+| 完整类型检查 | `mypy harness/` | 2 errors in existing `harness/tools/file_ops.py` (`os.O_NOFOLLOW` on Windows) |
+| 当前树凭据扫描 | 高置信 key 形态 + 长 secret 赋值扫描 | 仅既有 `FAKE_API_KEY = "sk-fake-test-key-not-real"` 占位符（测试与日志），无真实凭据 |
+| Git 历史凭据扫描 | 高置信 key 形态扫描 | 仅既有 `AGENT_LOG.md:999` 与 `tests/unit/test_llm_deepseek.py:15` 的 fake key 占位符 |
+
+**完整测试 / 类型检查失败说明**：
+- 失败不在 T13 修改范围内（T13 仅修改 `harness/feedback/__init__.py`、`harness/feedback/classifier.py`、`tests/unit/test_classifier.py`）。
+- Windows 当前基线的既有失败集中在：
+  - `harness/tools/file_ops.py` 使用 `os.O_NOFOLLOW`，Windows `os` 模块无该属性；
+  - symlink 测试在 Windows 无权限时报 `WinError 1314`；
+  - shell 测试使用 POSIX 命令 `pwd` / `sleep`；
+  - `RunTestsTool` 的 pytest JSON report 在 Windows 临时工作区场景未创建。
+- 按“一次只完成一个 TASK”约束，本轮未修改 T07/T08 相关既有代码。
+
+**Commit hash**：`dad9968` (`refactor(T13): complete reviews and verification [subagent: Zeno/Rawls; human: pending review]`)
+
+**人工干预**：
+- 用户要求在 Windows Codex managed worktree 中接管 GitHub 仓库后续实现，确认不创建嵌套 worktree，只完成一个 TASK。
+- 用户批准通过 Codex 工具的提升权限执行 `git fetch`、分支创建、`git add`、`git commit`，以及安装/运行本地 ruff 缓存用于 lint 验证。
+- 人工 review 仍 pending；未 push、未合并、未创建 PR。
+
+**教训**：
+1. T13 本身很小，但 review 仍发现了真实优先级缺陷：宽泛关键字匹配应放在更具体错误类型之后，或拆分为显式错误名和裸关键字两层。
+2. Windows managed worktree 对 `.git` 元数据写入需要提升权限；文件编辑仍在 workspace 内正常完成。
+3. 本仓库既有测试多处隐含 POSIX 假设；在 Windows Codex 客户端中，full-suite/typecheck 不能简单照搬之前 Linux/OpenCode 结果，必须如实记录。
