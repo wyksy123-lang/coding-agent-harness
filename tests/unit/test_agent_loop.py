@@ -66,6 +66,22 @@ class PendingCommandTool(Tool):
         )
 
 
+class WriteFileToolDouble(Tool):
+    def __init__(self, *, success: bool) -> None:
+        self._success = success
+
+    @property
+    def name(self) -> str:
+        return "write_file"
+
+    @property
+    def schema(self) -> dict[str, Any]:
+        return {"type": "object", "properties": {"path": {"type": "string"}}}
+
+    def execute(self, args: dict[str, Any]) -> ToolResult:
+        return ToolResult(success=self._success, output={}, error="write failed")
+
+
 def _config(tmp_path: Path, *, max_rounds: int = 5, stuck_threshold: int = 3) -> Config:
     return Config(
         max_rounds=max_rounds,
@@ -94,7 +110,14 @@ def _response(name: str, arguments: dict[str, Any] | None = None) -> LLMResponse
     )
 
 
-def _pytest_report(exitcode: int, message: str = "AssertionError: assert 1 == 2") -> dict[str, Any]:
+def _no_tool_response(content: str = "I cannot help") -> LLMResponse:
+    return LLMResponse(content=content, finish_reason="stop", tool_calls=[])
+
+
+def _pytest_report(
+    exitcode: int,
+    message: str = "AssertionError: assert 1 == 2",
+) -> dict[str, Any]:
     if exitcode == 0:
         return {
             "exitcode": 0,
@@ -145,7 +168,10 @@ def test_run_stops_at_max_rounds(tmp_path: Path) -> None:
     llm = SequencedLLM([_response("run_tests"), _response("run_tests")])
     run_tests = SequencedRunTestsTool(
         tmp_path,
-        [_pytest_report(1, "AssertionError: assert 1 == 2"), _pytest_report(1, "AssertionError: assert 2 == 3")],
+        [
+            _pytest_report(1, "AssertionError: assert 1 == 2"),
+            _pytest_report(1, "AssertionError: assert 2 == 3"),
+        ],
     )
     loop = AgentLoop(config, llm, _registry(config, run_tests))
 
@@ -172,14 +198,22 @@ def test_run_stops_when_same_failure_is_stuck(tmp_path: Path) -> None:
 
 def test_run_stops_when_governance_requires_approval_and_hitl_denies(tmp_path: Path) -> None:
     config = _config(tmp_path)
-    llm = SequencedLLM([_response("run_command", {"cmd": "rm -rf .cache"})])
-    loop = AgentLoop(config, llm, _registry(config, PendingCommandTool()))
+    llm = SequencedLLM(
+        [_response("run_command", {"cmd": "rm -rf .cache"}), _response("run_tests")]
+    )
+    run_tests = SequencedRunTestsTool(tmp_path, [_pytest_report(0)])
+    registry = ToolRegistry(config)
+    registry.register(PendingCommandTool())
+    registry.register(run_tests)
+    loop = AgentLoop(config, llm, registry)
 
     result = loop.run("run a dangerous command")
 
-    assert result.status == StopReason.HITL_DENIED
+    assert result.status == StopReason.PASS
     assert result.rounds[0].actions[0].tool_name == "run_command"
     assert result.rounds[0].outcome.value == "HITL_DENIED"
+    second_prompt = "\n".join(str(message) for message in llm.messages_seen[1])
+    assert "denied" in second_prompt
 
 
 def test_run_retries_llm_failures_before_dispatching_tool(tmp_path: Path) -> None:
@@ -193,3 +227,40 @@ def test_run_retries_llm_failures_before_dispatching_tool(tmp_path: Path) -> Non
     assert result.status == StopReason.PASS
     assert len(llm.messages_seen) == 2
     assert run_tests.calls == 1
+
+
+def test_run_does_not_treat_missing_tool_calls_as_pass(tmp_path: Path) -> None:
+    config = _config(tmp_path, max_rounds=1)
+    llm = SequencedLLM([_no_tool_response()])
+    registry = ToolRegistry(config)
+    loop = AgentLoop(config, llm, registry)
+
+    result = loop.run("do the work")
+
+    assert result.status == StopReason.MAX_ROUNDS
+    assert result.rounds[0].outcome.value == "FAIL"
+
+
+def test_tool_dispatch_failure_is_fed_back_to_next_round(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    llm = SequencedLLM([_response("missing_tool"), _response("run_tests")])
+    run_tests = SequencedRunTestsTool(tmp_path, [_pytest_report(0)])
+    registry = _registry(config, run_tests)
+    loop = AgentLoop(config, llm, registry)
+
+    result = loop.run("use an unknown tool then recover")
+
+    assert result.status == StopReason.PASS
+    second_prompt = "\n".join(str(message) for message in llm.messages_seen[1])
+    assert "missing_tool" in second_prompt
+    assert "tool_error" in second_prompt
+
+
+def test_output_files_include_only_successful_writes(tmp_path: Path) -> None:
+    config = _config(tmp_path, max_rounds=1)
+    llm = SequencedLLM([_response("write_file", {"path": "created.py"})])
+    loop = AgentLoop(config, llm, _registry(config, WriteFileToolDouble(success=False)))
+
+    result = loop.run("write a file")
+
+    assert result.output_files == []

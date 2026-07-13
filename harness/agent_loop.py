@@ -2,11 +2,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
-from harness.feedback import FailureClassifier, FeedbackInjector, RoundTracker, TestResultParser
+from harness.feedback import (
+    FailureClassifier,
+    FeedbackInjector,
+    RoundTracker,
+    TestResultParser,
+)
+from harness.governance.hitl import HITLState
 from harness.llm.base import LLMClient, LLMResponse, ToolCall
-from harness.memory.retriever import MemoryRetriever
+from harness.memory.retriever import MemoryRecorder, MemoryRetriever
 from harness.models import (
     Action,
     Config,
@@ -19,6 +25,10 @@ from harness.models import (
     TestResult,
 )
 from harness.tools.base import ToolRegistry, ToolResult
+
+
+class RoundRecorder(Protocol):
+    def record(self, round_record: RoundRecord) -> None: ...
 
 
 @dataclass
@@ -38,11 +48,15 @@ class AgentLoop:
         tool_registry: ToolRegistry,
         *,
         memory: MemoryRetriever | None = None,
+        memory_recorder: RoundRecorder | None = None,
+        hitl_state: HITLState | None = None,
     ) -> None:
         self.config = config
         self.llm_client = llm_client
         self.tool_registry = tool_registry
         self.memory = memory or MemoryRetriever(config.memory_file)
+        self.memory_recorder = memory_recorder or MemoryRecorder(config.memory_file)
+        self.hitl_state = hitl_state or HITLState()
         self.tracker = RoundTracker(config.max_rounds, config.stuck_threshold)
         self.output_files: list[str] = []
 
@@ -56,15 +70,23 @@ class AgentLoop:
                 record = _round_record(
                     round_number,
                     actions,
-                    RoundOutcome.PASS,
-                    "",
-                    "",
+                    RoundOutcome.FAIL,
+                    _llm_failure_fingerprint(response),
+                    "llm_no_tool_calls",
                 )
                 self.tracker.update(record)
-                return self._result(StopReason.PASS)
+                self._record_memory(record)
+                stop_reason = self.tracker.should_stop()
+                if stop_reason is not None:
+                    return self._result(stop_reason)
+                messages.append(
+                    _plain_feedback_message("llm_no_tool_calls", response.content)
+                )
+                continue
 
-            stop_reason: StopReason | None = None
+            stop_reason = None
             feedback: FeedbackMessage | None = None
+            plain_feedback: dict[str, Any] | None = None
             record = _round_record(round_number, actions, RoundOutcome.FAIL, "", "")
 
             for action in actions:
@@ -80,16 +102,23 @@ class AgentLoop:
 
                 tool_result = self._dispatch(action)
                 if _requires_approval(tool_result):
+                    request = self.hitl_state.create(
+                        action, self.config.hitl_timeout_seconds
+                    )
+                    denied = self.hitl_state.deny(request.request_id)
                     record = _round_record(
                         round_number,
                         actions,
                         RoundOutcome.HITL_DENIED,
-                        _tool_failure_fingerprint(action, tool_result),
+                        _hitl_failure_fingerprint(action, denied.decision),
                         "hitl_denied",
+                    )
+                    plain_feedback = _plain_feedback_message(
+                        "hitl_denied",
+                        f"Action {action.tool_name} was denied and must be revised.",
                     )
                     break
 
-                self._record_output_file(action)
                 if action.tool_name == "run_tests":
                     test_result = _test_result_from_tool_result(tool_result)
                     record, feedback = self._record_from_test_result(
@@ -107,14 +136,25 @@ class AgentLoop:
                         _tool_failure_fingerprint(action, tool_result),
                         "tool_error",
                     )
+                    plain_feedback = _plain_feedback_message(
+                        "tool_error",
+                        f"{action.tool_name}: {tool_result.error or 'tool failed'}",
+                    )
                     break
+                self._record_output_file(action)
 
             self.tracker.update(record)
+            self._record_memory(record)
+            if record.outcome == RoundOutcome.HITL_DENIED and plain_feedback is not None:
+                messages.append(plain_feedback)
+                continue
             stop_reason = self.tracker.should_stop()
             if stop_reason is not None:
                 return self._result(stop_reason)
             if feedback is not None:
                 messages.append(_feedback_message(feedback))
+            elif plain_feedback is not None:
+                messages.append(plain_feedback)
 
         return self._result(StopReason.MAX_ROUNDS)
 
@@ -151,7 +191,13 @@ class AgentLoop:
     ) -> tuple[RoundRecord, FeedbackMessage | None]:
         if test_result.status == "PASS":
             return (
-                _round_record(round_number, actions, RoundOutcome.PASS, "", "tests_passed"),
+                _round_record(
+                    round_number,
+                    actions,
+                    RoundOutcome.PASS,
+                    "",
+                    "tests_passed",
+                ),
                 None,
             )
 
@@ -178,6 +224,9 @@ class AgentLoop:
             output_files=list(self.output_files),
         )
 
+    def _record_memory(self, record: RoundRecord) -> None:
+        self.memory_recorder.record(record)
+
 
 def _initial_messages(requirement: str) -> list[dict[str, Any]]:
     return [
@@ -197,6 +246,13 @@ def _feedback_message(feedback: FeedbackMessage) -> dict[str, Any]:
             f"strategy_hint: {feedback.strategy_hint}\n"
             f"relevant_memory: {feedback.relevant_memory}"
         ),
+    }
+
+
+def _plain_feedback_message(kind: str, details: str) -> dict[str, Any]:
+    return {
+        "role": "user",
+        "content": f"{kind}: {details}",
     }
 
 
@@ -259,6 +315,14 @@ def _round_record(
 
 def _tool_failure_fingerprint(action: Action, tool_result: ToolResult) -> str:
     return f"TOOL|{action.tool_name}|{tool_result.error or ''}"
+
+
+def _hitl_failure_fingerprint(action: Action, decision: str) -> str:
+    return f"HITL|{action.tool_name}|{decision}"
+
+
+def _llm_failure_fingerprint(response: LLMResponse) -> str:
+    return f"LLM|no_tool_calls|{response.finish_reason}:{response.content}"
 
 
 def _runtime_error_result(message: str) -> TestResult:
