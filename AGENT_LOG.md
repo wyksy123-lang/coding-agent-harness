@@ -2577,3 +2577,133 @@
 1. Windows managed worktree 的 Git 元数据写入仍需要提升权限；代码文件编辑可在 worktree 中完成。
 2. reviewer subagent 若延迟返回，必须在收到真实结果后补记并修复 Critical，不得伪造 approval。
 3. 对后续小 task，可继续使用目标测试 + 精简全量摘要 + 必要静态检查，避免重复打印长失败栈。
+
+---
+
+## LOG-041 — T15 FeedbackInjector
+
+**时间**：2026-07-13  
+**执行环境**：Windows Codex 当前 checkout（未创建嵌套 worktree）  
+**Worktree**：`C:\Users\裴斐\Documents\coding-agent-harness-codex`  
+**Branch**：`codex/task/T15-feedback-injector`  
+**Base main**：`e5aefba` (`Merge pull request #19 from wyksy123-lang/task/T14-memory`)  
+**Task**：T15 — FeedbackInjector（反馈回灌 + 策略路由）
+
+**接管 / 同步记录**：
+- 用户说明 T14 已验证并 push，可继续下一个任务。
+- `git status --short --branch` 显示 `main...origin/main` clean；`git log` 显示 T14 merge commit `e5aefba` 位于 `main` / `origin/main`。
+- 从当前 checkout 的 `main` 创建任务分支 `codex/task/T15-feedback-injector`；未 push、未 merge、未修改 `main`。
+
+**触发的 Superpowers / workflow 技能**：
+- `using-superpowers`
+- `using-git-worktrees`（检测当前 checkout；未创建嵌套 worktree）
+- `test-driven-development`
+- `requesting-code-review`
+- `receiving-code-review`
+- `systematic-debugging`
+- `verification-before-completion`
+
+### Red 阶段
+
+**subagent 信息**：
+- 名称：Gibbs
+- Agent ID：`019f5afa-d857-71f3-aa31-0d7e04c79bc7`
+- 任务：只做 T15 implementation-prep，不编辑文件；读取相关 PLAN/SPEC、models、parser/classifier、memory retriever，报告 API 形状、测试建议和风险。
+- 结果：确认 `FeedbackInjector.inject(...) -> FeedbackMessage` 应使用既有 `FailureType` / `TestResult` / `FeedbackMessage` / `MemoryEntry`，调用 `MemoryRetriever.retrieve_relevant(..., limit=3)`，并保持 T15 范围。
+
+**Red 执行内容**：
+- 主 agent 创建 `tests/unit/test_injector.py`。
+- 覆盖六种 `FailureType` 的 deterministic `strategy_hint`、details 中的位置/expected/actual/message、memory 检索、memory 检索异常降级、details 长度限制。
+
+**Red 验证**：
+- 命令：`pytest tests/unit/test_injector.py -v`
+- 退出状态码：`1`
+- 关键失败原因：`ModuleNotFoundError: No module named 'harness.feedback.injector'`
+- 判定：失败由目标模块缺失导致；pytest 正常收集到导入阶段，不是语法、依赖或测试自身错误。
+
+**Commit hash**：`c1c4522` (`test(T15): add failing injector tests [subagent: Gibbs; human: pending review]`)
+
+### Green 阶段
+
+**执行者**：Codex 主 agent
+
+**执行内容**：
+- 新增 `harness/feedback/injector.py`。
+- 实现 `FeedbackInjector.inject(test_result, failure_type, memory)`：
+  - 为 ASSERTION / SYNTAX / IMPORT / RUNTIME / TIMEOUT / COLLECTION 提供 deterministic strategy route。
+  - 选择匹配 failure_type 的 failure；没有匹配时 fallback 到首个 failure。
+  - 格式化 `failure_type`、status、summary、test、location、expected、actual、message。
+  - 调用 memory retriever 获取最多 3 条 relevant memory；异常时返回空列表。
+  - 初版对整段 details 做 1200 字符上限。
+
+**Green 验证**：
+- `pytest tests/unit/test_injector.py -v` → 10 passed
+- `pytest tests/unit/test_parser.py tests/unit/test_classifier.py tests/unit/test_memory.py tests/unit/test_injector.py -v` → 124 passed
+
+**Commit hash**：`7935baa` (`feat(T15): implement minimal feedback injector [subagent: Codex; human: pending review]`)
+
+### Refactor / Review 阶段
+
+**Specification Compliance Review**：
+- Reviewer：Nash
+- Agent ID：`019f5b39-6488-7d31-a42a-36b444a59b96`
+- 输入：Base `e5aefba`，Head `7935baa`，PLAN.md T15 和 SPEC.md FeedbackInjector 要求。
+- 结果：No Critical findings；Important 1 个。
+- Important：整段 details 截断可能导致 required fields（尤其 actual/message）被长 expected/summary/test/location 挤出。
+
+**Code Quality Review**：
+- Reviewer：Kant
+- Agent ID：`019f5b39-9d63-74c2-bd5b-2110124d39c0`
+- 输入：同一 base/head，`harness/feedback/injector.py` 与 `tests/unit/test_injector.py`。
+- 结果：Important 1 个，Minor 1 个。
+- Important：`harness.feedback.__init__` 未导出 `FeedbackInjector`，不符合 parser/classifier 的 package interface 风格。
+- Minor：memory retrieval broad `Exception` catch 会隐藏诊断；建议缩窄或至少 logging。
+
+**Review fix 过程**：
+- 先添加失败测试：
+  - `test_feedback_package_exports_injector`
+  - `test_bounded_details_preserve_required_fields_when_expected_is_long`
+- 修复前验证：`pytest tests/unit/test_injector.py -v` → 2 failed, 10 passed，失败正是 package export 缺失和 details required fields 被截断。
+- 修复实现：
+  - `harness/feedback/__init__.py` 导出 `FeedbackInjector`。
+  - details 改为 per-field cap，并保留 required labels；整段仍保留 1200 字符兜底上限。
+  - memory retrieval 异常降级时记录 warning，再返回 `[]`。
+  - 手动检查 touched files 无超过 100 字符行。
+- 修复后验证：
+  - `pytest tests/unit/test_injector.py -v` → 12 passed
+  - `pytest tests/unit/test_parser.py tests/unit/test_classifier.py tests/unit/test_memory.py tests/unit/test_injector.py -v` → 126 passed
+  - `mypy harness/feedback/injector.py` → Success
+
+### 最终验证
+
+| 检查项 | 命令 | 结果 |
+|---|---|---|
+| 目标测试 | `pytest tests/unit/test_injector.py -v` | 12 passed |
+| 相关回归 | `pytest tests/unit/test_parser.py tests/unit/test_classifier.py tests/unit/test_memory.py tests/unit/test_injector.py -v` | 126 passed |
+| 完整测试套件 | `pytest -q` | 32 failed, 712 passed, 3 skipped |
+| Lint | `ruff check harness/feedback/injector.py tests/unit/test_injector.py` | 当前 Windows 环境未安装 ruff（command/module not found）；安装请求因会修改外部 Python 环境被 safety reviewer 拒绝 |
+| 类型检查 | `mypy harness/feedback/injector.py` | Success: no issues found |
+| touched-file 凭据扫描 | `rg -n "api_key\|secret\|password\|token\|sk-" harness/feedback/injector.py harness/feedback/__init__.py tests/unit/test_injector.py` | 无匹配（exit 1） |
+| 高置信凭据扫描 | `rg -n "(sk-[A-Za-z0-9_-]{20,}\|AKIA[0-9A-Z]{16})" harness tests AGENT_LOG.md` | 仅既有 fake key 占位符 `FAKE_API_KEY = "sk-fake-test-key-not-real"` 与历史日志引用 |
+| Git 历史高置信扫描 | `git log --all -p \| Select-String -Pattern "sk-[A-Za-z0-9_-]{20,}\|AKIA[0-9A-Z]{16}"` | 仅既有 fake key 占位符与历史日志引用 |
+
+**完整测试失败说明**：
+- 失败不在 T15 修改范围内（T15 修改 `harness/feedback/__init__.py`、`harness/feedback/injector.py`、`tests/unit/test_injector.py`）。
+- Windows 当前基线的既有失败集中在：
+  - `harness/tools/file_ops.py` 使用 Windows 缺失的 `os.O_NOFOLLOW`；
+  - symlink 测试在 Windows 权限不足时报 `WinError 1314`；
+  - shell 测试使用 POSIX 命令 `pwd` / `sleep`；
+  - `RunTestsTool` 的 pytest JSON report 在 Windows 临时工作区场景未创建。
+
+**Commit hash**：`fb307b6` (`refactor(T15): complete reviews and verification [subagent: Nash/Kant; human: pending review]`)
+
+**人工干预**：
+- 用户要求按 `CODEX_MODE.md` 高效完成模式继续 T15，只完成一个 task。
+- Git staging/commit 因 `.git` 写入限制需要提升权限；用户/系统允许 `git add` / `git commit`。
+- 尝试安装缺失 `ruff` 被安全审查拒绝，未绕过、未改外部环境。
+- 未 push、未 merge、未创建 PR；人工 review 仍 pending。
+
+**教训**：
+1. 对结构化反馈做长度限制时，应优先限制字段值而不是直接截断整段文本，否则会破坏必需字段。
+2. 即使功能文件可直接导入，也要保持 package-level export 与已有模块一致，避免调用方接口不稳定。
+3. Windows 环境下 full-suite 的既有 POSIX 假设仍会失败；本轮按 T15 范围记录而不越界修复。
