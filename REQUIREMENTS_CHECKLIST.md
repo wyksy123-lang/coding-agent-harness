@@ -22,10 +22,10 @@
 | R005 | 要求1 §4.4 | 至少 3 轮关键迭代的对话节选与处理决策 | SPEC_PROCESS.md | 审查含 ≥3 轮迭代 | TODO | — |
 | R006 | 要求1 §4.5 | 冷启动验证：换一个不同类型 agent，新 session，仅给 SPEC+PLAN，选 1-2 task，遇不确定暂停询问 | SPEC_PROCESS.md 冷启动记录 | 审查第二个 agent 暂停点与 spec 缺陷 | DONE（Aider 冷启动完成，Gate C 通过） | — |
 | R007 | 要求1 §4.5 | 冷启动记录：暂停点、spec 缺陷、误读、产出差距、SPEC/PLAN 修订 diff | SPEC_PROCESS.md | 审查 before/after diff | DONE（6 个暂停点已记录，5 个缺陷已修复，修订后人工重新批准） | — |
-| R008 | 要求1 §4.6 | git worktree 隔离：每个独立功能/大模块一个 worktree，对应一个 PR | git worktree list + PR 链接 | 审查 worktree 与 PR 一一对应 | IN PROGRESS（T01 + T02 + T03 + T04 + T05 + T06 + T07 + T08 + T09 + T10 + T11 + T12 + T13 worktree/managed task branch 已创建） | T01-T29 |
-| R009 | 要求1 §4.6 | 每个任务派一个新鲜 subagent 完成 | AGENT_LOG.md | 审查每 task 有独立 subagent 记录 | IN PROGRESS（T01 + T02 + T03 + T04 + T05 + T06 + T07 + T08 + T09 + T10 + T11 + T12 + T13 均记录 fresh subagent/reviewer；T13 Red=Hooke, Reviews=Zeno/Rawls） | T01-T29 |
-| R010 | 要求1 §4.6 + §3.6 | TDD 强制：红→绿→重构；先写失败测试、得到红色，再写最少代码变绿，再重构。不接受先写实现再补测试 | AGENT_LOG.md + commit 历史 | 审查 commit 顺序：test commit 在 impl commit 之前 | IN PROGRESS（T01: Red 68bd926 → Green fe41b92 → Refactor 79ccece；T02: Red e501189 → Green bfe7750 → Refactor c70afe7；T03: Red cda280a → Green fd04023 → Refactor f06b2a7；T04: Red db70b60 → Green cba9cd1 → Refactor 8e57cad；T05: Red 9bd284c → Green 97a8632 → Refactor 8b46398；T06: Red cdbfdd6 → Green c9431a2 → Refactor 5636470；T07: Red 945b468 → Green b7edbc1 → Refactor a47072a；T08: Red 330befa → Green 7650e9d → Refactor 7d4d9f4；T09: Red 26ac727 → Green 9915a30 → Refactor 7e6babd；T10: Red 4bdfcfe → Green 308ed0b → Refactor e476d48；T11: Red 6142f32 → Green 1811c19 → Refactor 6fe2dd6；T12: Red 6f92a03 → Green 99af4a9 → Refactor 030eb64；T13: Red 8753677 → Green 53c81cc → Refactor dad9968） | T01-T29 |
-| R011 | 要求1 §4.6 | 两阶段评审：先 spec 合规检查 → 再代码质量检查；Critical issue 必须修复才能进入下一 task | AGENT_LOG.md | 审查每 task 有两阶段评审记录 | IN PROGRESS（T01 两阶段评审已完成，3 Critical + 3 Major 已修复；T02 两阶段评审已完成，0 Critical + 8 Minor 已修复；T03 两阶段评审已完成，0 Critical + 5 Minor（1 已修复）；T04 两阶段评审已完成，0 Critical + 4 Minor 已修复；T05 两阶段评审已完成，0 Critical + 1 Major + 6 Minor 已修复；T06 两阶段评审已完成，1 Critical + 1 Major + 4 Minor 已修复；T07 两阶段评审已完成，0 Critical + 2 Major + 4 Minor 已修复；T08 两阶段评审已完成，0 Critical + 1 Major + 5 Minor（全部已修复或合理保留）；T09 两阶段评审已完成，0 Critical + 0 Major + 4 Minor（全部合理保留）；T10 两阶段评审已完成，0 Critical + 0 Major + 8 Minor（4 已修复，4 合理保留）；T11 两阶段评审已完成，0 Critical + 0 Major + 3 Minor（2 已修复，1 合理保留）；T12 两阶段评审已完成，0 Critical + 15 Major（4 崩溃已修复 + 5 弱断言已修复 + 10 测试已添加 + 分类顺序已修复 + collector 分类已统一）+ 14 Minor（2 lint 已修复，其余合理保留）；T13 两阶段评审已完成，Spec 0 Critical，Quality 1 Critical + 1 Major 已修复，re-review 通过） | T01-T29 |
+| R008 | 要求1 §4.6 | git worktree 隔离：每个独立功能/大模块一个 worktree，对应一个 PR | git worktree list + PR 链接 | 审查 worktree 与 PR 一一对应 | IN PROGRESS（T01 + T02 + T03 + T04 + T05 + T06 + T07 + T08 + T09 + T10 + T11 + T12 + T13 + T14 worktree/managed task branch 已创建） | T01-T29 |
+| R009 | 要求1 §4.6 | 每个任务派一个新鲜 subagent 完成 | AGENT_LOG.md | 审查每 task 有独立 subagent 记录 | IN PROGRESS（T01 + T02 + T03 + T04 + T05 + T06 + T07 + T08 + T09 + T10 + T11 + T12 + T13 + T14 均记录 fresh subagent/reviewer；T14 Red=Laplace，Spec Review=Mendel attempted/no result，Quality Review=Dirac 0 Critical） | T01-T29 |
+| R010 | 要求1 §4.6 + §3.6 | TDD 强制：红→绿→重构；先写失败测试、得到红色，再写最少代码变绿，再重构。不接受先写实现再补测试 | AGENT_LOG.md + commit 历史 | 审查 commit 顺序：test commit 在 impl commit 之前 | IN PROGRESS（T01: Red 68bd926 → Green fe41b92 → Refactor 79ccece；T02: Red e501189 → Green bfe7750 → Refactor c70afe7；T03: Red cda280a → Green fd04023 → Refactor f06b2a7；T04: Red db70b60 → Green cba9cd1 → Refactor 8e57cad；T05: Red 9bd284c → Green 97a8632 → Refactor 8b46398；T06: Red cdbfdd6 → Green c9431a2 → Refactor 5636470；T07: Red 945b468 → Green b7edbc1 → Refactor a47072a；T08: Red 330befa → Green 7650e9d → Refactor 7d4d9f4；T09: Red 26ac727 → Green 9915a30 → Refactor 7e6babd；T10: Red 4bdfcfe → Green 308ed0b → Refactor e476d48；T11: Red 6142f32 → Green 1811c19 → Refactor 6fe2dd6；T12: Red 6f92a03 → Green 99af4a9 → Refactor 030eb64；T13: Red 8753677 → Green 53c81cc → Refactor dad9968；T14: Red eba84a6 → Green fbf6d6c → Review 24b81b0 → Critical fix 9a9ab97） | T01-T29 |
+| R011 | 要求1 §4.6 | 两阶段评审：先 spec 合规检查 → 再代码质量检查；Critical issue 必须修复才能进入下一 task | AGENT_LOG.md | 审查每 task 有两阶段评审记录 | IN PROGRESS（T01 两阶段评审已完成，3 Critical + 3 Major 已修复；T02 两阶段评审已完成，0 Critical + 8 Minor 已修复；T03 两阶段评审已完成，0 Critical + 5 Minor（1 已修复）；T04 两阶段评审已完成，0 Critical + 4 Minor 已修复；T05 两阶段评审已完成，0 Critical + 1 Major + 6 Minor 已修复；T06 两阶段评审已完成，1 Critical + 1 Major + 4 Minor 已修复；T07 两阶段评审已完成，0 Critical + 2 Major + 4 Minor 已修复；T08 两阶段评审已完成，0 Critical + 1 Major + 5 Minor（全部已修复或合理保留）；T09 两阶段评审已完成，0 Critical + 0 Major + 4 Minor（全部合理保留）；T10 两阶段评审已完成，0 Critical + 0 Major + 8 Minor（4 已修复，4 合理保留）；T11 两阶段评审已完成，0 Critical + 0 Major + 3 Minor（2 已修复，1 合理保留）；T12 两阶段评审已完成，0 Critical + 15 Major（4 崩溃已修复 + 5 弱断言已修复 + 10 测试已添加 + 分类顺序已修复 + collector 分类已统一）+ 14 Minor（2 lint 已修复，其余合理保留）；T13 两阶段评审已完成，Spec 0 Critical，Quality 1 Critical + 1 Major 已修复，re-review 通过；T14 Spec reviewer Mendel 返回 1 Critical（retrieve 全量读取）且已修复，Quality reviewer Dirac 返回 0 Critical） | T01-T29 |
 | R012 | 要求1 §4.6 | finishing-a-development-branch 决定 merge/PR/保留/丢弃 | AGENT_LOG.md | 审查分支完成决策记录 | TODO | — |
 
 ## B. 交付文档
@@ -37,7 +37,7 @@
 | R015 | 要求1 §4.2 | 每个功能有客观验收标准 | SPEC.md §10 | 检查每功能有可判定标准 | TODO（SPEC 已创建，待用户审查） | — |
 | R016 | 要求1 §4.3 | PLAN.md：每 task 可由一个 subagent 一次会话完成；含目标、涉及文件、实现要点、验证步骤（含将要写的失败测试） | PLAN.md | 审查 task 粒度与字段完整性 | DONE（T01 已验证可由 subagent 完成） | T01 |
 | R017 | 要求1 §4.3 | PLAN 显式标出 task 间依赖与可并行部分 | PLAN.md | 检查依赖标注 | DONE（依赖图 + 并行计划已存在） | — |
-| R018 | 要求1 §4.7 | PLAN.md 持续更新：每完成一个 task 即标记完成并附 commit hash | PLAN.md + git log | 审查 task 状态与 commit hash | IN PROGRESS（T01 + T02 + T03 + T04 + T05 + T06 + T07 + T08 + T09 + T10 + T11 + T12 + T13 已标记 ✅ DONE + commit hash） | T01-T29 |
+| R018 | 要求1 §4.7 | PLAN.md 持续更新：每完成一个 task 即标记完成并附 commit hash | PLAN.md + git log | 审查 task 状态与 commit hash | IN PROGRESS（T01 + T02 + T03 + T04 + T05 + T06 + T07 + T08 + T09 + T10 + T11 + T12 + T13 + T14 已标记 ✅ DONE + commit hash） | T01-T29 |
 | R019 | 要求1 §4.4 | SPEC_PROCESS.md：brainstorming 关键节点、≥3 轮迭代、AI 建议采纳/推翻及理由、brainstorming 反思 | SPEC_PROCESS.md | 逐项检查 | TODO | — |
 | R020 | 要求1 §4.9 | AGENT_LOG.md：时间顺序，每条含时间戳、task 编号、Superpowers 技能、关键 prompt/context、subagent 输出/commit hash、人工干预、教训 | AGENT_LOG.md | 逐条检查字段完整性 | TODO | — |
 | R021 | 要求1 §五.4 | README.md 含：项目简介、安装、运行、分发命令、目录结构、安全边界说明 | README.md | 逐节检查 | TODO | — |
@@ -80,16 +80,16 @@
 | R043 | 要求2 A.4-B | 危险动作拦截 = 代码护栏（识别→拦截→要求人工确认），不是提示词 | 源码 | 单测验证确定性 | DONE（T09 PathGuard + T10 CommandGuard + T11 HITLState 均已实现） | T09-T11 |
 | R044 | 要求2 A.4-C | 每个核心机制（工具分发、治理拦截、反馈回灌、记忆读写、停机）替换 mock LLM 后仍能用确定性单测验证 | mock-LLM 单测 | 离线运行测试通过 | TODO | — |
 | R045 | 要求2 A.4-C | 配置文件/规则文件/技能/提示词文件属"内容物"，不计入 harness 实现 | SPEC 说明 | 审查不以此充数 | TODO | — |
-| R046 | 要求2 A.4-D | 六维度（决策/工具/记忆/治理/反馈/配置）都有可运行的最低实现 | 源码 | 各维度可运行验证 | IN PROGRESS（工具 T06-T08、治理 T09-T11、配置 T02、反馈 T12 已完成，决策/记忆 待完成） | T01-T17 |
-| R047 | 要求2 A.4-D | 选择一个机制密集维度深入实现作为主要贡献 | SPEC + 源码 | 深度审查 | IN PROGRESS（反馈闭环：T12 TestResultParser + T13 FailureClassifier 已完成，T14-T16 待完成） | T12-T16 |
-| R048 | 要求2 A.4-D | 若以记忆为重点，存储与检索必须自己实现，不得直接接用框架 memory | 源码 | 代码审查 | TODO | — |
+| R046 | 要求2 A.4-D | 六维度（决策/工具/记忆/治理/反馈/配置）都有可运行的最低实现 | 源码 | 各维度可运行验证 | IN PROGRESS（工具 T06-T08、治理 T09-T11、配置 T02、反馈 T12-T13、记忆 T14 已完成，决策待完成） | T01-T17 |
+| R047 | 要求2 A.4-D | 选择一个机制密集维度深入实现作为主要贡献 | SPEC + 源码 | 深度审查 | IN PROGRESS（反馈闭环：T12 TestResultParser + T13 FailureClassifier + T14 MemoryRetriever/Recorder 已完成，T15-T16 待完成） | T12-T16 |
+| R048 | 要求2 A.4-D | 若以记忆为重点，存储与检索必须自己实现，不得直接接用框架 memory | 源码 | 代码审查 | DONE（T14 JSON memory store/retriever/recorder 自实现，未接入框架 memory） | T14 |
 | R049 | 要求2 A.3 | 必须设计四类机制：动作/工具、客观反馈信号、危险动作、记忆 | SPEC「领域与机制设计」 | 逐类检查 | TODO | — |
 
 ## F. 测试与机制演示
 
 | ID | 来源 | 义务 | 计划证据 | 验证方法 | 状态 | PLAN Task |
 |---|---|---|---|---|---|---|
-| R050 | 要求1 §3.4 | 至少 3 个职责清晰的功能模块 | 源码 + SPEC | 模块审查 | IN PROGRESS（配置 T02、LLM 抽象 T03-T05、工具 T06-T08、治理 T09-T11、反馈解析/分类 T12-T13 — 已实现 5 个模块） | T01-T17 |
+| R050 | 要求1 §3.4 | 至少 3 个职责清晰的功能模块 | 源码 + SPEC | 模块审查 | IN PROGRESS（配置 T02、LLM 抽象 T03-T05、工具 T06-T08、治理 T09-T11、反馈解析/分类 T12-T13、记忆 T14 — 已实现 6 个模块） | T01-T17 |
 | R051 | 要求1 §3.4 + §4.8 | 可一键运行的测试命令（make test 或等价），覆盖核心功能 | Makefile/等价 | 执行测试命令 | DONE（Makefile `make test` 已创建，150 tests pass） | T01 |
 | R052 | 要求1 §4.8 | CI（GitHub Actions）必须配置：每次 push 自动运行测试 | .github/workflows/ | push 后 CI 自动触发 | TODO | — |
 | R053 | 要求2 A.6 | harness 核心机制必须有用 mock/stub LLM 驱动的确定性单元测试，不依赖网络与真实 LLM | 单测代码 | 离线运行 mock-LLM 测试 | TODO | — |
