@@ -2139,3 +2139,198 @@
 2. `request_id` 字段添加是 PLAN T11 API 设计的必然结果——`approve(request_id)`/`deny(request_id)`/`check_timeout(request_id)` 方法签名要求请求有唯一标识。在 `HITLRequest` dataclass 末尾添加带默认值的字段是向后兼容的最小修改方式。
 3. Code Quality Review 发现的过宽异常匹配（`(ValueError, TypeError)`）是 Red 阶段测试编写的常见模式——当实现尚未确定异常类型时，测试用宽匹配作为 provisional 约定。Green 阶段实现确定后应在 Refactor 阶段收紧为精确匹配。
 4. 返回可变引用是 Python dataclass 的常见设计选择——与代码库中 CommandGuard/PathGuard 的模式一致。防御性拷贝会破坏引用同一性测试，且 SPEC 未要求封装级别保护。
+
+---
+
+## LOG-036 — TASK-12 Red 阶段
+
+**时间戳**：2026-07-13
+
+**Task 编号**：TASK-12（TestResultParser pytest JSON 解析器）
+
+**触发的 Superpowers 技能**：
+- `subagent-driven-development`
+- `test-driven-development`
+
+**subagent 信息**：
+- 类型：`general`
+- 关键 prompt：仅编写 `tests/unit/test_parser.py` 失败测试，不写任何实现代码
+
+**subagent 执行内容**：
+1. 编写 `tests/unit/test_parser.py`（450 行，77 个测试，13 个测试类）
+   - TestTestResultParserExistence（5 个测试）：验证 parser 是类、有 parse 方法、可调用、可实例化、实例方法
+   - TestParseAllPassed（6 个测试）：status=PASS, failures=[], summary 含 passed/total/collected/exitcode
+   - TestParseAssertionFailure（9 个测试）：status=FAIL, 1 failure, test_name, message, file, line, type=ASSERTION, expected/actual
+   - TestParseImportError（7 个测试）：status=FAIL, 1 failure, message 含 ModuleNotFoundError, type=IMPORT
+   - TestParseSyntaxError（5 个测试）：status=ERROR, type=SYNTAX, message 含 SyntaxError
+   - TestParseTypeError（7 个测试）：status=FAIL, type=RUNTIME, message 含 ValueError
+   - TestParseMixedResults（7 个测试）：2 failures, 2 passed, 2 failed in summary
+   - TestParseEmptyReport（3 个测试）：status=PASS, failures=[], total=0
+   - TestParseInvalidJSON（6 个测试）：status=ERROR, type=COLLECTION, message 非空
+   - TestParseEmptyString（4 个测试）：status=ERROR, type=COLLECTION
+   - TestParseMissingFields（6 个测试）：缺失 call/crash/summary/tests 用默认值填充
+   - TestParseReturnType（6 个测试）：返回 TestResult, failures 是 Failure 实例, summary 是 dict
+   - TestParseExpectedActual（6 个测试）：expected/actual 从 "assert X == Y" 提取
+2. 创建 `tests/fixtures/` 目录（7 个 JSON fixture 文件）：all_passed.json, assertion_failure.json, import_error.json, syntax_error.json, type_error.json, mixed_results.json, empty_report.json
+
+**Red 阶段验证**：
+- 命令：`pytest tests/unit/test_parser.py -v`
+- 退出状态码：`2`（collection error）
+- 关键失败原因：`ModuleNotFoundError: No module named 'harness.feedback'`
+- 结果：0 collected, 1 error
+- 失败原因确认：`harness/feedback/` 包尚未创建，测试因导入目标模块不存在而失败。测试文件本身语法正确，导入语句合法，断言全面。**不是语法错误、环境错误或测试本身错误。**
+
+**人工干预**：无
+
+**Commit hash**：`6f92a03` (test(T12): add failing tests)
+
+**教训**：—
+
+---
+
+## LOG-037 — TASK-12 Green 阶段
+
+**时间戳**：2026-07-13
+
+**Task 编号**：TASK-12（TestResultParser pytest JSON 解析器）
+
+**触发的 Superpowers 技能**：
+- `subagent-driven-development`
+- `test-driven-development`
+
+**subagent 信息**：
+- 类型：`general`
+- 关键 prompt：仅实现让 `tests/unit/test_parser.py` 通过的最少代码
+
+**subagent 执行内容**：
+1. 创建 `harness/feedback/__init__.py`（空文件，包标记，后重构为 re-export）
+2. 创建 `harness/feedback/parser.py`（119 行）：
+   - `TestResultParser` 类：`@staticmethod parse(json_str) -> TestResult`
+   - 解析 JSON → 确定 status（exitcode 0→PASS, 1→FAIL, 其他→ERROR）
+   - 提取 test failures（`tests` 数组中 outcome="failed"）
+   - 提取 collection errors（`collectors` 数组中 outcome="failed"）
+   - 内置 `_classify()` 方法：初步分类 ASSERTION/IMPORT/SYNTAX/RUNTIME
+   - 内置 `_extract_expected_actual()` 方法：从 "assert X == Y" 提取 expected/actual
+   - JSON 解析失败 → 返回 ERROR TestResult（type=COLLECTION）
+   - 缺失字段 → 默认值填充
+
+**Green 阶段验证**：
+- 命令：`pytest tests/unit/test_parser.py -v`
+- 退出状态码：`0`
+- 结果：**77 passed** in 0.05s
+- 从 Red 到 Green：`ModuleNotFoundError` → 全部 77 个测试通过
+- 回归检查：`pytest tests/ -v` 同样 698 passed，无回归
+
+**人工干预**：无
+
+**Commit hash**：`99af4a9` (feat(T12): implement minimal green solution)
+
+**教训**：—
+
+---
+
+## LOG-038 — TASK-12 Refactor + 两阶段评审 + 最终验证
+
+**时间戳**：2026-07-13
+
+**Task 编号**：TASK-12（TestResultParser pytest JSON 解析器）
+
+**触发的 Superpowers 技能**：
+- `test-driven-development`（重构阶段）
+- `subagent-driven-development`（Code Quality Review subagent）
+
+### Refactor 阶段
+
+**执行内容**：
+1. 在 `harness/feedback/__init__.py` 添加 re-export（遵循 T06-T11 建立的模式）
+2. 添加完整 docstring（类、parse 方法、_classify 方法、_extract_expected_actual 方法）
+3. 简化 `_classify` 方法：移除冗余的 RUNTIME 显式检查（默认即 RUNTIME）
+4. 修复分类顺序以符合 SPEC §3.3.2：ASSERTION → SYNTAX → IMPORT → RUNTIME（原为 ASSERTION → IMPORT → SYNTAX → RUNTIME）
+5. 提取 `_error_result()` 辅助方法减少重复代码
+6. 修复 Code Quality Review 发现的 4 个主要崩溃 bug：
+   - 非 dict JSON（如 `[1,2,3]`）→ 原本 AttributeError 崩溃，现返回 ERROR TestResult
+   - `call.longrepr` 为 `null` → 原本 TypeError 崩溃，现 fallback 为空字符串
+   - `collector.longrepr` 为 `null` → 原本 TypeError 崩溃，现 fallback 为空字符串
+   - `tests`/`collectors` 非 list → 原本 AttributeError 崩溃，现跳过
+   - 统一 collector 分类逻辑使用 `_classify()` 而非内联分类
+7. 统一 collector 分类逻辑使用 `_classify()` 方法（而非独立的 `if "SyntaxError"` 内联检查）
+8. 修复测试弱断言（5 个 Major 问题）：
+   - `isinstance(failure.line, int)` → `== 0`
+   - `isinstance(failure.file, str)` → `== ""`
+   - `type in (COLLECTION, SYNTAX)` → `== SYNTAX`
+   - `"ValueError" or "TypeError"` → `"ValueError"`
+   - `len(result.failures) >= 1` → `== 1`
+9. 新增 10 个边缘情况测试（TestParseEdgeCases 类）覆盖非 dict JSON、null longrepr、非 list tests/collectors、null summary
+10. 修复 lint 问题：移除未使用的 `pytest` 导入（F401），`getattr` 调用改为直接属性访问（B009）
+
+**验证**：`pytest tests/unit/test_parser.py -v` → 87 passed（从 77 增至 87）
+
+### 第一阶段：Specification Compliance Review
+
+**对照**：SPEC.md §3.3.1（TestResultParser）、§3.3.2（FailureClassifier 分类规则）、§6.1（数据模型）、PLAN.md T12
+
+**发现 Critical 问题及修复**：无 Critical 问题
+
+**检查结果**：
+
+| 检查项 | 结果 |
+|---|---|
+| TestResultParser.parse(json_str: str) -> TestResult | ✅ |
+| 解析 JSON → 提取 status, failures, summary | ✅ |
+| 每个 Failure 含 type, test_name, message, file, line, expected, actual | ✅ |
+| JSON 解析失败 → TestResult(status=ERROR, failures=[{type=COLLECTION}]) | ✅ |
+| 缺失字段 → 默认值填充 | ✅ |
+| 仅解析 pytest JSON 格式 | ✅ |
+| 非 pytest 格式返回错误 | ✅ |
+| 无越界实现（未实现 T13+/T14+/T15+/T16+ 功能） | ✅ |
+| 无真实网络/LLM 依赖 | ✅ |
+
+**越界实现检查**：无越界（_classify 是私有辅助方法用于填充 Failure.type 必填字段，T13 FailureClassifier 将是独立的公共分类器）
+
+### 第二阶段：Code Quality Review
+
+**subagent 信息**：
+- 类型：`general`（reviewer 角色）
+- 关键 prompt：审查 T12 代码质量，检查 8 项标准
+
+**审查结果摘要**：
+
+| # | 标准 | 判定 | 严重度 |
+|---|---|---|---|
+| 1 | 职责划分 | WARN | Major（_classify 重复 T13 职责——已文档化说明） |
+| 2 | 可读性 | PASS | — |
+| 3 | 接口和类型 | WARN | Major（None 传播 → 已修复） |
+| 4 | 错误处理 | WARN | Major（3 个崩溃路径 → 已修复） |
+| 5 | 安全边界 | PASS | — |
+| 6 | 测试质量 | WARN | Major（6 个弱断言 + 4 个缺失测试 → 已修复） |
+| 7 | 可维护性 | WARN | Major（分类顺序 + 代码重复 → 已修复） |
+| 8 | 无真实网络/LLM 依赖 | PASS | — |
+
+**修复的问题**：0 Critical, 15 Major, 14 Minor 问题中，4 个崩溃 bug 已修复，5 个弱断言已修复，10 个边缘情况测试已添加，分类顺序已修复，collector 分类已统一。
+
+**未修复（合理保留）**：
+- `_classify()` 与 T13 FailureClassifier 重复：已文档化说明为"初步分类"，Failure dataclass 要求 type 字段非空，保留合理
+- 测试文件中的 `isinstance`/`is_dataclass` 检查：作为健全性检查保留，无害
+- mypy 测试文件无类型标注：PLAN 仅要求 `mypy harness/feedback/parser.py`，测试文件可不检查
+
+### 最终验证
+
+| 检查项 | 命令 | 结果 |
+|---|---|---|
+| 目标测试 | `pytest tests/unit/test_parser.py -v` | **87 passed** in 0.13s |
+| 完整测试套件 | `pytest tests/ -q` | **708 passed** in 9.87s |
+| Lint | `ruff check harness/ tests/` | All checks passed! |
+| 类型检查 | `mypy harness/` | Success: no issues found in 18 source files |
+| 凭据泄露检查 | `grep -rni "api_key\|secret\|password\|token\|sk-" harness/feedback/ tests/unit/test_parser.py tests/fixtures/` | 无匹配（源码无凭据） |
+| Git 历史扫描 | `git log --all -p \| grep -i "api_key\|secret\|password"` | 仅文档引用（AGENT_LOG 中概念性提及），无真实凭据 |
+
+**Commit hash**：`030eb64` (refactor(T12): complete reviews and verification)
+
+**人工干预**：无
+
+**教训**：
+1. TestResultParser 是反馈闭环的入口点——77 个测试 + 87 个最终测试覆盖了丰富的数据格式和边缘情况，是 TDD 的良好实践案例。
+2. Code Quality Review 发现的 4 个崩溃路径（非 dict JSON、null longrepr、非 list tests/collectors）都是"JSON 输入可能但测试未覆盖"的典型边缘情况。TDD 的 happy-path 测试倾向于忽略这些情况，Review 阶段填补了缺口。
+3. SPEC §3.3.2 分类顺序为 ASSERTION → SYNTAX → IMPORT → RUNTIME。当消息同时包含多个错误类型特征时，顺序决定分类结果。实现应与 SPEC 顺序一致。
+4. `_classify()` 在 parser 中的存在不可避免——Failure dataclass 的 type 字段是必填项，parser 必须设一个值。T13 将作为独立公共分类器提供权威分类。这是"字段契约"与"模块职责分离"之间的合理权衡。
+5. 统一 collector 分类使用 `_classify()` 消除了两条不同分类路径之间的不一致，使代码更易于维护，并确保分类规则单一来源。
