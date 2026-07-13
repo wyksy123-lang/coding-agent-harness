@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import cast
+
 from harness.feedback.classifier import FailureClassifier
 from harness.models import Failure, FailureType
 
@@ -81,6 +83,31 @@ class TestFailureClassifierDefaults:
 
     def test_empty_message_defaults_to_runtime(self):
         failure = _failure("")
+
+        result = FailureClassifier.classify(failure)
+
+        assert result == FailureType.RUNTIME
+
+
+class TestFailureClassifierPrecedence:
+    def test_syntax_error_with_assert_source_line_returns_syntax(self):
+        failure = _failure("SyntaxError: invalid syntax\n    assert = 1")
+
+        result = FailureClassifier.classify(failure)
+
+        assert result == FailureType.SYNTAX
+
+    def test_assertion_error_still_returns_assertion_when_message_mentions_syntax(self):
+        failure = _failure("AssertionError: assert result == 'SyntaxError'")
+
+        result = FailureClassifier.classify(failure)
+
+        assert result == FailureType.ASSERTION
+
+
+class TestFailureClassifierMalformedInputs:
+    def test_none_message_defaults_to_runtime(self):
+        failure = _failure(cast(str, None))
 
         result = FailureClassifier.classify(failure)
 
