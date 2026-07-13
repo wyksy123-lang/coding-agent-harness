@@ -86,6 +86,17 @@ def test_different_fingerprints_do_not_trigger_stuck():
     assert tracker.should_stop() is None
 
 
+def test_empty_fingerprints_do_not_trigger_stuck():
+    tracker = RoundTracker(max_rounds=5, stuck_threshold=3)
+
+    tracker.update(_record(1, fingerprint=""))
+    tracker.update(_record(2, fingerprint=""))
+    tracker.update(_record(3, fingerprint=""))
+
+    assert tracker.detect_loop() is False
+    assert tracker.should_stop() is None
+
+
 def test_hitl_denied_returns_hitl_denied_stop_reason():
     tracker = RoundTracker(max_rounds=5, stuck_threshold=3)
 
@@ -105,7 +116,7 @@ def test_fail_before_max_rounds_and_not_stuck_continues():
     assert tracker.should_stop() is None
 
 
-def test_failure_fingerprint_is_deterministic_and_redacts_long_hash_input():
+def test_failure_fingerprint_is_deterministic_and_keeps_readable_message():
     failure = _failure()
 
     first = RoundTracker.failure_fingerprint(failure)
@@ -113,5 +124,21 @@ def test_failure_fingerprint_is_deterministic_and_redacts_long_hash_input():
 
     assert first == second
     assert first.startswith("ASSERTION|tests/test_sample.py::test_example|")
-    assert "AssertionError" not in first
-    assert len(first.rsplit("|", 1)[-1]) == 64
+    stored_message = first.split("|", 2)[2]
+    assert stored_message.startswith("AssertionError: assert 1 == 2")
+    assert "[sha256:" in stored_message
+    assert stored_message.endswith("]")
+    assert len(stored_message.rsplit("[sha256:", 1)[1].rstrip("]")) == 64
+
+
+def test_failure_fingerprint_truncates_long_message_but_keeps_hash():
+    failure = _failure()
+    failure.message = "AssertionError: " + ("very long failure detail " * 50)
+
+    fingerprint = RoundTracker.failure_fingerprint(failure)
+    stored_message = fingerprint.split("|", 2)[2]
+
+    assert stored_message.startswith("AssertionError:")
+    assert "very long failure detail very long failure detail" in stored_message
+    assert len(stored_message) <= 320
+    assert "[sha256:" in stored_message
