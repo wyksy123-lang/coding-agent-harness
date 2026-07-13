@@ -2476,3 +2476,101 @@
 1. T13 本身很小，但 review 仍发现了真实优先级缺陷：宽泛关键字匹配应放在更具体错误类型之后，或拆分为显式错误名和裸关键字两层。
 2. Windows managed worktree 对 `.git` 元数据写入需要提升权限；文件编辑仍在 workspace 内正常完成。
 3. 本仓库既有测试多处隐含 POSIX 假设；在 Windows Codex 客户端中，full-suite/typecheck 不能简单照搬之前 Linux/OpenCode 结果，必须如实记录。
+
+---
+
+## LOG-040 — T14 MemoryRetriever + MemoryRecorder
+
+**时间**：2026-07-13  
+**执行环境**：Windows Codex managed worktree  
+**Worktree**：`C:\Users\裴斐\.codex\worktrees\t14-memory\coding-agent-harness-t14-memory`  
+**Branch**：`task/T14-memory`  
+**Base main**：`d64f118` (`Merge pull request #18 from wyksy123-lang/chore/codex-efficient-mode`)  
+**Task**：T14 — MemoryRetriever + MemoryRecorder（记忆维度）
+
+**接管 / 同步记录**：
+- 用户说明 T13 已 merge 到 main 后，执行 `git fetch origin`、确认 `main` 包含 T13 merge commit `27467b6`。
+- 从 main 创建 fresh worktree 和 `task/T14-memory` 分支；未创建嵌套 worktree。
+- 开发过程中 `main` 前进到 `d64f118`，执行 `git rebase main`，确保 T14 分支基于最新 main，且 diff 仅包含 T14 文件。
+
+### Red 阶段
+
+**subagent 信息**：
+- 名称：Laplace
+- Agent ID：`019f5aa5-242b-7f21-92b8-b57f47d19609`
+- 任务：只创建 `tests/unit/test_memory.py`，覆盖按 failure_type 过滤、limit、缺失/空/非法 JSON、get_conventions、record 后可检索、保留既有 history。
+- 结果：subagent 写入测试文件后触发平台使用额度限制并停止；未继续实现代码。
+
+**Red 验证**：
+- 计划命令：`pytest tests/unit/test_memory.py -v`
+- 观察：在 Windows 当前环境中，pytest 目标命令停在 collection 阶段；随后用直接导入验证失败原因。
+- 直接验证命令：`python -c "import importlib; importlib.import_module('harness.memory.retriever')"`
+- 关键失败原因：`ModuleNotFoundError: No module named 'harness.memory'`
+- 判定：失败由目标模块缺失导致，不是测试语法、依赖或真实 LLM/网络问题。
+
+**Commit hash**：`eba84a6` (`test(T14): add failing memory tests [subagent: Laplace; human: pending review]`)
+
+### Green 阶段
+
+**执行者**：Codex 主 agent（Green 范围较小，未另派并行 worker）
+
+**执行内容**：
+- 新增 `harness/memory/__init__.py` 导出 `MemoryRetriever` / `MemoryRecorder`。
+- 新增 `harness/memory/retriever.py`：
+  - `MemoryRetriever.retrieve_relevant(failure_type, limit=3)` 读取 JSON memory file，按 `FailureType` 过滤，返回限定数量 `MemoryEntry`。
+  - `MemoryRetriever.get_conventions()` 返回 `project_conventions` dict，缺失/空/非法 JSON 返回 `{}`。
+  - `MemoryRecorder.record(round_record)` 追加 round 结果到 `failure_history`，缺失文件时创建 parent/file。
+  - 非法 JSON / 读写失败记录 warning 并返回空结构；核心测试不依赖真实网络或真实 LLM。
+
+**Green 验证**：
+- `pytest tests/unit/test_memory.py -q -p no:cacheprovider --basetemp=...pytest-tmp-t14-clean` → 12 passed
+- `python -c "from harness.memory import MemoryRetriever, MemoryRecorder; print(MemoryRetriever.__name__, MemoryRecorder.__name__)"` → `MemoryRetriever MemoryRecorder`
+
+**Commit hash**：`fbf6d6c` (`feat(T14): implement minimal memory store [subagent: Codex; human: pending review]`)
+
+### Refactor / Review 阶段
+
+**Specification Compliance Review**：
+- Reviewer subagent：Mendel
+- Agent ID：`019f5ad4-82ac-7b31-8dd0-b79054523142`
+- 输入：T14 文件、PLAN.md T14、SPEC.md（如可用），要求只返回 Critical spec issues。
+- 结果：已发起，但在本轮短等待窗口内未返回；未虚构通过结论。
+
+**Code Quality Review**：
+- Reviewer subagent：Dirac
+- Agent ID：`019f5ad8-deb1-7940-a527-9903ea5c0c86`
+- 输入：`harness/memory/retriever.py`、`tests/unit/test_memory.py`，要求只返回 Critical quality issues。
+- 结果：`Critical quality issues: none.`
+
+**本地审查结论**：
+- Spec：T14 计划要求的 JSON 读取、failure_type 过滤、limit 截断、get_conventions、record append、缺失/空/非法 JSON 容错均已覆盖。
+- Quality：实现保持最小范围，未引入真实 LLM/网络依赖，未接入第三方 agent/memory 框架；Dirac reviewer 返回 0 Critical。
+- 因 Spec reviewer subagent 未返回，本轮记录为 Spec reviewer attempted + local Spec review，无 Critical 修复项。
+
+### 最终验证
+
+| 检查项 | 命令 | 结果 |
+|---|---|---|
+| 目标测试 | `pytest tests/unit/test_memory.py -q -p no:cacheprovider --basetemp=...pytest-tmp-t14-final-target` | 12 passed |
+| 完整测试套件 | `pytest tests/ -q -p no:cacheprovider --basetemp=...pytest-tmp-t14-final-full` | 32 failed, 699 passed, 3 skipped |
+| Lint | `ruff check harness/memory/retriever.py tests/unit/test_memory.py` / `python -m ruff ...` | 当前 Windows 环境未安装 ruff（command/module not found） |
+| 类型检查 | `mypy harness/memory/retriever.py` | Success: no issues found |
+| 凭据扫描 | `rg -n '(sk-[A-Za-z0-9_-]{20,}\|AKIA[0-9A-Z]{16})' harness/memory tests/unit/test_memory.py` | 无匹配（exit 1） |
+
+**完整测试失败说明**：
+- 失败不在 T14 修改范围内（T14 仅修改 `harness/memory/__init__.py`、`harness/memory/retriever.py`、`tests/unit/test_memory.py`）。
+- Windows 既有失败集中在：
+  - `harness/tools/file_ops.py` 使用 Windows 缺失的 `os.O_NOFOLLOW`；
+  - symlink 测试在 Windows 权限不足时报 `WinError 1314`；
+  - shell 测试使用 POSIX 命令或依赖 pytest JSON report 场景。
+
+**Commit hash**：`24b81b0` (`refactor(T14): complete reviews and verification [subagent: reviewer-attempted; human: pending review]`)
+
+**人工干预**：
+- 用户要求继续完成 T14，并尽可能减少核验 token 消耗、加快整体速度。
+- 未 push、未 merge、未创建 PR。
+
+**教训**：
+1. Windows managed worktree 的 Git 元数据写入仍需要提升权限；代码文件编辑可在 worktree 中完成。
+2. reviewer subagent 若因平台状态迟迟不返回，必须记录 attempted/no result，不得伪造 approval。
+3. 对后续小 task，可继续使用目标测试 + 精简全量摘要 + 必要静态检查，避免重复打印长失败栈。
