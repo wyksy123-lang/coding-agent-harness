@@ -3936,3 +3936,89 @@
 - `python -m pip check` -> No broken requirements found
 
 **Commit hash**：`f803688` (`fix(T24): declare packages for CI editable install`)
+
+---
+
+## LOG-054 — T25 GitLab CI
+
+**时间**：2026-07-14
+**执行环境**：Windows Codex 当前 checkout（未创建嵌套 worktree）
+**Worktree**：`C:\Users\裴斐\Documents\coding-agent-harness-codex`
+**Branch**：`codex/task/T25-gitlab-ci`
+**Base main**：`6f9dd6c` (`Merge pull request #30 from wyksy123-lang/codex/task/T24-github-actions-ci`)
+**Task**：T25 — GitLab CI
+
+**接管 / 同步记录**：
+- 用户说明 T24 已验证并 push，可继续 T25。
+- 当前 `main` / `origin/main` 已位于 T24 merge commit `6f9dd6c`，工作区 clean。
+- 从 `main` 创建 `codex/task/T25-gitlab-ci`；本轮只执行 T25，未 push、未 merge、未开始 T26。
+
+### Red 阶段
+
+**subagent 信息**：
+- 名称：Locke
+- Agent ID：`019f6081-e1ff-7691-aad7-688a6da44ac0`
+- 任务：只读分析 T25 GitLab CI 测试、最小 `.gitlab-ci.yml` 结构和风险。
+- 结果：建议 `unit-test` job、`python:3.11`、pip cache、`python -m pip install -e .`、`make test`，并提醒 cache key 与凭据风险。
+
+**Red 执行内容**：
+- 新增 `tests/unit/test_gitlab_ci.py`。
+- 覆盖 `.gitlab-ci.yml` YAML 可解析、精确 `unit-test` job、Python 3.11 镜像、pip cache、依赖安装和 `make test`。
+
+**Red 验证**：
+- PLAN Red 命令：`python -c "import yaml; d=yaml.safe_load(open('.gitlab-ci.yml')); assert 'unit-test' in d"` -> `FileNotFoundError: [Errno 2] No such file or directory: '.gitlab-ci.yml'`
+- 目标测试：`python -m pytest tests/unit/test_gitlab_ci.py -v` -> 3 failed，均因 `.gitlab-ci.yml` 缺失。
+- 判定：失败由 T25 目标文件缺失导致，非语法、环境、依赖或测试自身错误。
+
+**Commit hash**：`c22c6e6` (`test(T25): add failing GitLab CI checks [subagent: Locke; human: pending review]`)
+
+### Green 阶段
+
+**执行者**：Codex main agent
+
+**执行内容**：
+- 新增 `.gitlab-ci.yml`。
+- `unit-test` job 使用 `python:3.11`、`stage: test`、`PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"`、cache key from `pyproject.toml`、`.cache/pip` cache path。
+- `before_script` 运行 `python -m pip install --upgrade pip` 和 `python -m pip install -e .`。
+- `script` 运行 `make test`。
+
+**Green 验证**：
+- `python -c "import yaml; d=yaml.safe_load(open('.gitlab-ci.yml')); assert 'unit-test' in d"` -> pass
+- `python -m pytest tests/unit/test_gitlab_ci.py -v` -> 3 passed
+
+**Commit hash**：`1126256` (`feat(T25): add GitLab unit-test job [subagent: Locke; human: pending review]`)
+
+### Refactor / Review 阶段
+
+**Specification Compliance Review**：
+- Reviewer：Einstein
+- Agent ID：`019f6085-c354-7562-a137-35d4732f6751`
+- 结果：Critical 0, Major 0, Minor 0。
+
+**Code Quality Review**：
+- Reviewer：Dalton
+- Agent ID：`019f6085-f75a-7892-a5fd-55521a709366`
+- 结果：Critical 0, Major 0, Minor 1。
+- Minor：`before_script` 测试使用 substring match，可改为精确列表断言。
+
+**Review fix / Refactor 内容**：
+- 将 `tests/unit/test_gitlab_ci.py` 中 `before_script` 断言改为精确列表断言。
+
+**最终验证**：
+| 检查项 | 命令 | 结果 |
+|---|---|---|
+| GitLab YAML / job | `python -c "import yaml; d=yaml.safe_load(open('.gitlab-ci.yml')); assert 'unit-test' in d; print('gitlab ci: OK')"` | `gitlab ci: OK` |
+| 目标测试 | `python -m pytest tests/unit/test_gitlab_ci.py -v` | 3 passed |
+| 完整测试套件 | `python -m pytest tests/ -q` | 815 passed, 5 skipped, 1 warning |
+| Lint | `python -m ruff check harness/ webui/ demo/ tests/` | All checks passed |
+| 类型检查 | `python -m mypy harness/ webui/ demo/` | Success: no issues found in 32 source files |
+| 依赖检查 | `python -m pip check` | No broken requirements found |
+| 凭据扫描 | `rg -n "(sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY)" .` | 仅既有 fake key 占位符与历史日志引用 |
+| diff 检查 | `git diff --check` | no whitespace errors |
+
+**Commit hash**：`787bba4` (`refactor(T25): complete GitLab CI reviews [subagent: Einstein/Dalton; human: pending review]`)
+
+**人工干预**：
+- 用户要求继续完成 T25。
+- Git staging/commit 因 `.git` 写入限制需要提升权限；已用于本地 `git add` / `git commit`。
+- 未 push、未 merge、未创建 PR；人工 review 仍 pending。
