@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import os
+import sys
+from pathlib import Path
 
 from harness.models import Config, GuardResult
 from harness.tools.base import Tool, ToolResult
 from harness.tools.shell import RunCommandTool, RunTestsTool
 
 WORKING_TEST_COMMAND = (
-    "python3 -m pytest --json-report --json-report-file=.harness/report.json"
+    f'"{sys.executable}" -m pytest --json-report --json-report-file=.harness/report.json'
 )
 
 
@@ -205,11 +207,15 @@ class TestRunCommandToolSafeExecution:
             target_directory=tmp_workspace,
             dangerous_command_patterns=[],
         )
-        result = tool.execute({"cmd": "pwd"})
-        assert result.success is True
-        assert os.path.realpath(tmp_workspace) in os.path.realpath(
-            result.output["stdout"].strip()
+        command = (
+            f'"{sys.executable}" -c '
+            '"from pathlib import Path; print(Path.cwd())"'
         )
+        result = tool.execute({"cmd": command})
+        assert result.success is True
+        assert Path(result.output["stdout"].strip()).resolve() == Path(
+            tmp_workspace
+        ).resolve()
 
 
 # ---------------------------------------------------------------------------
@@ -387,7 +393,9 @@ class TestRunCommandToolTimeout:
             dangerous_command_patterns=[],
             timeout=1,
         )
-        result = tool.execute({"cmd": "sleep 5"})
+        result = tool.execute(
+            {"cmd": f'"{sys.executable}" -c "import time; time.sleep(5)"'}
+        )
         assert isinstance(result, ToolResult)
         assert result.success is False
         assert result.error is not None
@@ -399,7 +407,9 @@ class TestRunCommandToolTimeout:
             dangerous_command_patterns=[],
             timeout=2,
         )
-        result = tool.execute({"cmd": "sleep 10"})
+        result = tool.execute(
+            {"cmd": f'"{sys.executable}" -c "import time; time.sleep(10)"'}
+        )
         assert result.success is False
         assert result.error is not None
 

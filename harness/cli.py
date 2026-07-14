@@ -63,7 +63,7 @@ class _FinishTool:
     def execute(self, args: dict[str, Any]) -> object:
         tool_result = cast(
             Callable[..., object],
-            getattr(import_module("harness.tools.base"), "ToolResult"),
+            import_module("harness.tools.base").ToolResult,
         )
         return tool_result(success=True, output={})
 
@@ -76,7 +76,7 @@ def _tool_class(module_name: str, class_name: str) -> ToolConstructor:
 def build_tool_registry(config: Config) -> ToolRegistryProtocol:
     tool_registry = cast(
         Callable[[Config], ToolRegistryProtocol],
-        getattr(import_module("harness.tools.base"), "ToolRegistry"),
+        import_module("harness.tools.base").ToolRegistry,
     )
     write_file_tool = _tool_class("harness.tools.file_ops", "WriteFileTool")
     read_file_tool = _tool_class("harness.tools.file_ops", "ReadFileTool")
@@ -111,7 +111,7 @@ def _default_agent_loop_factory(config: Config, api_key: str) -> AgentLoopProtoc
 
     agent_loop = cast(
         Callable[..., AgentLoopProtocol],
-        getattr(import_module("harness.agent_loop"), "AgentLoop"),
+        import_module("harness.agent_loop").AgentLoop,
     )
     llm_client = DeepSeekClient(
         api_key=api_key,

@@ -13,6 +13,8 @@ from webui.websocket import WebSocketStatusEndpoint, WebUIState
 
 _STATIC_DIR = Path(__file__).with_name("static")
 
+__all__ = ["WebUIState", "app", "create_app"]
+
 
 def create_app(state: WebUIState | None = None) -> FastAPI:
     webui_state = state or WebUIState()

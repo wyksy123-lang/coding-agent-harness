@@ -3561,3 +3561,74 @@
 1. 在集成测试里只把 action 放进记录不等于执行了该 action；需要断言工具 double 的调用计数或副作用。
 2. HITL 的 PENDING 是人工边界，不能用自动 deny 冒充审批流程；AgentLoop 应停在边界并让上层 UI/CLI 接管。
 3. 反馈驱动测试要让 fake LLM 对反馈条件敏感，否则只是预排脚本，不足以证明反馈改变下一步动作。
+# LOG-048 - FIX-WIN-01 Windows Native Compatibility
+
+**Date**: 2026-07-14  
+**Environment**: Windows 11 + PowerShell + native Python  
+**Worktree**: `C:\Users\裴斐\Documents\coding-agent-harness-codex`  
+**Branch**: `codex/fix-win-01`  
+**Base main**: `0c3f01e` (`Merge pull request #26 from wyksy123-lang/codex/task/T21-webui-frontend`)  
+**Task**: FIX-WIN-01 - Windows Native Compatibility  
+**Scope note**: This run did not start T23 or any business PLAN task.
+
+## Baseline
+
+- `python -m pytest -q --tb=short` -> `32 failed, 766 passed, 3 skipped, 1 warning`
+- `python -m ruff check harness webui tests` -> 7 pre-existing fixable Ruff issues
+- `python -m mypy harness webui tests` -> 800 strict-test-suite/type-check issues
+
+## Classification
+
+- Windows platform incompatibility: direct `os.O_NOFOLLOW`; POSIX `python3`, `pwd`, and `sleep`; symlink tests assumed privilege availability.
+- Missing dev dependency: `pytest-json-report` is declared in `pyproject.toml`, but `python -m pip show pytest-json-report` showed it absent from the active Windows interpreter. No network install was performed.
+- Test design errors: symlink tests skipped only on missing `os.symlink`, not on actual Windows symlink capability.
+- Real implementation defects: `file_ops` had no Windows no-follow fallback; `RunTestsTool` used shell execution/quoting for pytest and failed to produce a report on Windows.
+
+## Subagent
+
+- Prep-only subagent: `019f5f43-a940-71c3-86ab-c436c60ec4c6` (`Boole`)
+- Prompt/context: review Windows compatibility failures in `file_ops`, `shell`, focused tests, and `pyproject.toml`; no file edits.
+- Output: confirmed minimal fixes for `getattr(os, "O_NOFOLLOW", 0)`, Windows symlink/reparse fallback, `sys.executable` test commands, `RunTestsTool` `shell=False`, Ruff cleanup, and scoped mypy test override.
+
+## Red
+
+- Added regression tests for missing `O_NOFOLLOW`, actual symlink capability probing, and cross-platform shell command usage.
+- Red command: `python -m pytest tests/unit/test_file_ops.py tests/unit/test_shell.py -q --tb=short`
+- Result: failed for missing Windows behavior (`os.O_NOFOLLOW` AttributeError and pytest report execution), not syntax/environment/test errors.
+- Commit: `505acdf` (`test(FIX-WIN-01): add Windows compatibility regression tests`)
+
+## Green
+
+- `harness/tools/file_ops.py`: uses `getattr(os, "O_NOFOLLOW", 0)`; keeps Linux `O_NOFOLLOW`; adds Windows symlink/reparse-point refusal when no no-follow flag exists.
+- `harness/tools/shell.py`: keeps `RunCommandTool` shell semantics for explicit shell command strings; runs `RunTestsTool` through parsed argv with `shell=False`; adds offline fallback JSON report when `pytest-json-report` is unavailable.
+- Green verification:
+  - `python -m pytest tests/unit/test_file_ops.py tests/unit/test_shell.py -q --tb=short` -> `135 passed, 2 skipped`
+  - `python -m pytest -q --tb=short` -> `797 passed, 5 skipped, 1 warning`
+- Commit: `4e3d9f1` (`fix(FIX-WIN-01): support native Windows execution`)
+
+## Refactor / Verification
+
+- Ran `python -m ruff check harness webui tests --fix`; reviewed resulting import/style cleanup.
+- Added scoped `tests.*` mypy override without `ignore_errors`; removed now-unused test `type: ignore` comments; exported `WebUIState` explicitly from `webui.app`.
+- Verification:
+  - `python -m ruff check harness webui tests` -> `All checks passed!`
+  - `python -m mypy harness webui tests` -> `Success: no issues found in 53 source files`
+  - `python -m pytest -q --tb=short` -> `797 passed, 5 skipped, 1 warning`
+- Commit: `67d5dfc` (`refactor(FIX-WIN-01): complete compatibility verification`)
+
+## Final Verification
+
+- `python -m pytest -q` -> `797 passed, 5 skipped, 1 warning`
+- `python -m ruff check harness webui tests` -> `All checks passed!`
+- `python -m mypy harness webui tests` -> `Success: no issues found in 53 source files`
+- Remaining skips: 2 Windows symlink capability skips in file ops; 3 pre-existing skips in the broader suite.
+- Security: no real network, real LLM, or real credentials were used. PathGuard, CommandGuard, credential protection, and target-directory boundaries were not weakened.
+
+## Human / Git
+
+- Human gate: user explicitly requested FIX-WIN-01 outside the normal T23 sequence.
+- Git escalation: local `.git` writes required approval for `git add`/`git commit`.
+- No push, no merge, no remote branch modification.
+- Docs commit: pending at time of this entry.
+
+---

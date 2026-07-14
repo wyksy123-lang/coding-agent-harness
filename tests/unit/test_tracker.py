@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import harness.feedback as feedback
-
 from harness.feedback.tracker import RoundTracker
 from harness.models import Failure, FailureType, RoundOutcome, RoundRecord, StopReason
 
