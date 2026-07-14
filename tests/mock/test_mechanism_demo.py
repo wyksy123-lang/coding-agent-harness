@@ -2,14 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from harness.models import StopReason
-
 from demo.run_demo import (
     demonstrate_feedback_correction,
     demonstrate_governance_interception,
     demonstrate_stuck_detection,
     run_all_demonstrations,
 )
+from harness.models import StopReason
 
 
 def test_governance_demo_intercepts_rm_rf_with_hitl_pending(tmp_path: Path) -> None:

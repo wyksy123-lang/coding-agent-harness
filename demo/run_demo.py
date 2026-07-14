@@ -113,6 +113,10 @@ class FeedbackDrivenLLM(LLMClient):
 
 
 def demonstrate_governance_interception(base_dir: str | Path | None = None) -> DemoResult:
+    if base_dir is None:
+        with tempfile.TemporaryDirectory(prefix="coding-agent-harness-demo-") as tmp_dir:
+            return demonstrate_governance_interception(tmp_dir)
+
     workspace = _workspace(base_dir, "governance")
     config = _config(workspace)
     command = "rm -rf .harness"
@@ -149,6 +153,10 @@ def demonstrate_governance_interception(base_dir: str | Path | None = None) -> D
 
 
 def demonstrate_feedback_correction(base_dir: str | Path | None = None) -> DemoResult:
+    if base_dir is None:
+        with tempfile.TemporaryDirectory(prefix="coding-agent-harness-demo-") as tmp_dir:
+            return demonstrate_feedback_correction(tmp_dir)
+
     workspace = _workspace(base_dir, "feedback")
     config = _config(workspace)
     llm = FeedbackDrivenLLM()
@@ -174,6 +182,10 @@ def demonstrate_feedback_correction(base_dir: str | Path | None = None) -> DemoR
 
 
 def demonstrate_stuck_detection(base_dir: str | Path | None = None) -> DemoResult:
+    if base_dir is None:
+        with tempfile.TemporaryDirectory(prefix="coding-agent-harness-demo-") as tmp_dir:
+            return demonstrate_stuck_detection(tmp_dir)
+
     workspace = _workspace(base_dir, "stuck")
     config = _config(workspace, max_rounds=5, stuck_threshold=2)
     run_tests = SequencedRunTestsTool(
@@ -204,6 +216,10 @@ def demonstrate_stuck_detection(base_dir: str | Path | None = None) -> DemoResul
 
 
 def run_all_demonstrations(base_dir: str | Path | None = None) -> list[DemoResult]:
+    if base_dir is None:
+        with tempfile.TemporaryDirectory(prefix="coding-agent-harness-demo-") as tmp_dir:
+            return run_all_demonstrations(tmp_dir)
+
     root = _workspace(base_dir, "mechanism-demo")
     return [
         demonstrate_governance_interception(root),
@@ -217,7 +233,12 @@ def main() -> int:
         results = run_all_demonstrations(tmp_dir)
     for result in results:
         print(f"{result.name}: {result.stop_reason.value}")
-    return 0
+    expected = {
+        "governance_interception": StopReason.HITL_DENIED,
+        "feedback_correction": StopReason.PASS,
+        "stuck_detection": StopReason.STUCK,
+    }
+    return 0 if all(result.stop_reason == expected[result.name] for result in results) else 1
 
 
 def _config(
@@ -243,7 +264,7 @@ def _registry(config: Config, *tools: Tool) -> ToolRegistry:
 
 
 def _workspace(base_dir: str | Path | None, name: str) -> Path:
-    root = Path(base_dir) if base_dir is not None else Path(tempfile.mkdtemp())
+    root = Path(base_dir) if base_dir is not None else Path.cwd()
     workspace = root / name
     workspace.mkdir(parents=True, exist_ok=True)
     return workspace
