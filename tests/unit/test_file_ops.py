@@ -8,6 +8,18 @@ from harness.tools.base import Tool, ToolResult
 from harness.tools.file_ops import ListFilesTool, ReadFileTool, WriteFileTool
 
 
+def _can_create_symlink(tmp_workspace):
+    target = os.path.join(tmp_workspace, "symlink_probe_target.txt")
+    link = os.path.join(tmp_workspace, "symlink_probe_link.txt")
+    with open(target, "w", encoding="utf-8") as f:
+        f.write("probe")
+    try:
+        os.symlink(target, link)
+    except (OSError, NotImplementedError):
+        return False
+    return True
+
+
 class TestWriteFileToolConstruction:
     """Verify WriteFileTool can be constructed and has the Tool API surface."""
 
@@ -107,6 +119,16 @@ class TestWriteFileToolWrites:
         assert result.success is True
         with open(os.path.join(tmp_workspace, "u.txt"), encoding="utf-8") as f:
             assert f.read() == "你好世界 🌍"
+
+    def test_write_succeeds_when_platform_has_no_o_nofollow(
+        self, tmp_workspace, monkeypatch
+    ):
+        monkeypatch.delattr(os, "O_NOFOLLOW", raising=False)
+        tool = WriteFileTool(target_directory=tmp_workspace)
+        result = tool.execute({"path": "win.txt", "content": "native"})
+        assert result.success is True
+        with open(os.path.join(tmp_workspace, "win.txt"), encoding="utf-8") as f:
+            assert f.read() == "native"
 
 
 class TestWriteFileToolBoundary:
@@ -537,12 +559,10 @@ class TestFileOpsEdgeCases:
         assert result.success is False
         assert result.error == "path out of bounds"
 
-    @pytest.mark.skipif(
-        not hasattr(os, "symlink"),
-        reason="Platform does not support symlinks",
-    )
     def test_write_symlink_rejected_by_no_follow(self, tmp_workspace):
         """O_NOFOLLOW prevents writing through a symlink inside the target."""
+        if not hasattr(os, "symlink") or not _can_create_symlink(tmp_workspace):
+            pytest.skip("Current Windows user cannot create symlinks")
         target = os.path.join(tmp_workspace, "real.txt")
         with open(target, "w", encoding="utf-8") as f:
             f.write("real")
@@ -555,12 +575,10 @@ class TestFileOpsEdgeCases:
         with open(target, encoding="utf-8") as f:
             assert f.read() == "real"
 
-    @pytest.mark.skipif(
-        not hasattr(os, "symlink"),
-        reason="Platform does not support symlinks",
-    )
     def test_read_symlink_rejected_by_no_follow(self, tmp_workspace):
         """O_NOFOLLOW prevents reading through a symlink inside the target."""
+        if not hasattr(os, "symlink") or not _can_create_symlink(tmp_workspace):
+            pytest.skip("Current Windows user cannot create symlinks")
         target = os.path.join(tmp_workspace, "real.txt")
         with open(target, "w", encoding="utf-8") as f:
             f.write("secret")
