@@ -62,6 +62,7 @@ class AgentLoop:
 
     def run(self, requirement: str) -> AgentResult:
         messages = _initial_messages(requirement)
+        has_green_tests = False
 
         for round_number in range(1, self.config.max_rounds + 1):
             response = self._chat_with_retries(messages)
@@ -91,13 +92,26 @@ class AgentLoop:
 
             for action in actions:
                 if action.tool_name == "finish":
-                    record = _round_record(
-                        round_number,
-                        actions,
-                        RoundOutcome.PASS,
-                        "",
-                        "finish",
-                    )
+                    if has_green_tests:
+                        record = _round_record(
+                            round_number,
+                            actions,
+                            RoundOutcome.PASS,
+                            "",
+                            "finish",
+                        )
+                    else:
+                        record = _round_record(
+                            round_number,
+                            actions,
+                            RoundOutcome.FAIL,
+                            _finish_before_green_fingerprint(action),
+                            "finish_before_green",
+                        )
+                        plain_feedback = _plain_feedback_message(
+                            "finish_before_green",
+                            "Run the tests until they pass before calling finish.",
+                        )
                     break
 
                 tool_result = self._dispatch(action)
@@ -121,6 +135,7 @@ class AgentLoop:
 
                 if action.tool_name == "run_tests":
                     test_result = _test_result_from_tool_result(tool_result)
+                    has_green_tests = test_result.status == "PASS"
                     record, feedback = self._record_from_test_result(
                         round_number,
                         actions,
@@ -323,6 +338,10 @@ def _hitl_failure_fingerprint(action: Action, decision: str) -> str:
 
 def _llm_failure_fingerprint(response: LLMResponse) -> str:
     return f"LLM|no_tool_calls|{response.finish_reason}:{response.content}"
+
+
+def _finish_before_green_fingerprint(action: Action) -> str:
+    return f"FINISH|before_green|{action.args.get('reason', '')}"
 
 
 def _runtime_error_result(message: str) -> TestResult:
