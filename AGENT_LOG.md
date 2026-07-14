@@ -3632,3 +3632,113 @@
 - Docs commit: pending at time of this entry.
 
 ---
+
+## LOG-050 — T23 机制演示（三项行为）
+
+**时间**：2026-07-14  
+**执行环境**：Windows Codex 当前 checkout（未创建嵌套 worktree）  
+**Worktree**：`C:\Users\裴斐\Documents\coding-agent-harness-codex`  
+**Branch**：`codex/task/T23-mechanism-demo`  
+**Base main**：`767154b` (`Merge pull request #28 from wyksy123-lang/codex/task/T22-mock-integration`)  
+**Task**：T23 — 机制演示（三项行为）
+
+**接管 / 同步记录**：
+- 用户说明 T22 已检验并 push，可继续下一个任务。
+- `git status --short --branch` 显示 clean `main...origin/main`；`git log` 确认 `main` / `origin/main` 位于 T22 merge commit `767154b`。
+- 从最新 `main` 创建 `codex/task/T23-mechanism-demo`；本轮只执行 T23，未 push、未 merge、未开始 T24。
+- 用户后续说明网络已连接；T23 按 SPEC 仍使用 mock LLM、无真实网络、无真实 LLM。
+
+### Red 阶段
+
+**subagent 信息**：
+- 名称：Plato
+- Agent ID：`019f5fb9-ce7a-7740-83e6-725523827b2b`
+- 任务：只读分析 T23 最小 API、Red 测试、Green 实现方案和不要越界的范围。
+- 结果：建议 `DemoResult` + `demonstrate_governance_interception()` / `demonstrate_feedback_correction()` / `demonstrate_stuck_detection()` / `run_all_demonstrations()` / `main()`；三项场景断言与最终测试一致。
+
+**Red 执行内容**：
+- 新增 `tests/mock/test_mechanism_demo.py`。
+- 覆盖治理拦截、反馈驱动修正、STUCK 卡死检测和 `run_all_demonstrations()` 聚合。
+
+**Red 验证**：
+- `pytest tests/mock/test_mechanism_demo.py -v` → collection error
+- 失败：`ModuleNotFoundError: No module named 'demo'`
+- 判定：失败由 T23 目标模块缺失导致，非语法、环境、依赖或测试自身错误。
+
+**Commit hash**：`aba8999` (`test(T23): add failing mechanism demo tests [subagent: Plato; human: pending review]`)
+
+### Green 阶段
+
+**执行者**：Codex 主 agent
+
+**执行内容**：
+- 新增 `demo/__init__.py` 与 `demo/run_demo.py`。
+- 演示①：MockLLMClient 请求 `run_command("rm -rf .harness")`，真实 `RunCommandTool` / `CommandGuard` 拦截为 HITL PENDING。
+- 演示②：条件式 fake LLM 只有看到 ASSERTION 反馈后才返回 `write_file` 修正动作，再跑绿测。
+- 演示③：两轮相同 ASSERTION failure fingerprint，`stuck_threshold=2` 触发 STUCK。
+
+**Green 验证**：
+- `pytest tests/mock/test_mechanism_demo.py -v` → 4 passed
+- `python -m demo.run_demo` → `governance_interception: HITL_DENIED`; `feedback_correction: PASS`; `stuck_detection: STUCK`
+- `pytest tests/mock/test_agent_loop_mock.py tests/mock/test_mechanism_demo.py -v` → 9 passed
+
+**Commit hash**：`3797dfe` (`feat(T23): implement deterministic mechanism demo [subagent: Plato; human: pending review]`)
+
+### Refactor / Review 阶段
+
+**Specification Compliance Review**：
+- Reviewer：Dewey
+- Agent ID：`019f5fc5-dc31-70e1-a754-101318419ad3`
+- 结果：Critical 0、Major 2、Minor 0。
+- Major：
+  1. `main()` 无条件返回 0，不能作为三项演示验收命令。
+  2. `Makefile` demo target 使用 `python3`，不符合当前 Windows native 环境。
+
+**Code Quality Review**：
+- Reviewer：Sagan
+- Agent ID：`019f5fc6-221d-77d0-b37f-311bc2eddc13`
+- 结果：Critical 0、Major 1、Minor 1。
+- Major：`tests/mock/test_mechanism_demo.py` import 顺序触发 ruff I001。
+- Minor：public demo API 默认路径使用 `mkdtemp()` 会留下临时目录。
+
+**Review fix / Refactor 内容**：
+- `main()` 显式校验三项期望 stop reason，失败时返回 1。
+- `Makefile` demo target 改为 `python -m demo.run_demo`。
+- public demo API 默认调用改用 `TemporaryDirectory()`，避免长期临时目录副作用。
+- 修正 `tests/mock/test_mechanism_demo.py` import 顺序。
+
+**修复后验证**：
+- `pytest tests/mock/test_mechanism_demo.py -v` → 4 passed
+- `python -m demo.run_demo` → 三项稳定输出并 exit 0
+- `python -m ruff check demo/ tests/mock/test_mechanism_demo.py` → All checks passed
+- `mypy demo/run_demo.py` → Success
+- `pytest tests/mock/test_agent_loop_mock.py tests/mock/test_mechanism_demo.py -v` → 9 passed
+- `python -m py_compile demo/run_demo.py tests/mock/test_mechanism_demo.py` → passed
+- `git diff --check` → clean（仅 CRLF 工作区提示）
+- `make demo` → 当前 PowerShell 环境无 `make` 可执行文件；已验证 Makefile `demo` target 内容为 `python -m demo.run_demo`，等价命令直接通过。
+- T23 touched-file high-confidence credential scan → 无新增真实凭据。
+
+### 最终验证
+
+| 检查项 | 命令 | 结果 |
+|---|---|---|
+| 目标测试 | `pytest tests/mock/test_mechanism_demo.py -v` | 4 passed |
+| 演示脚本 | `python -m demo.run_demo` | 三项输出，exit 0 |
+| Mock 回归 | `pytest tests/mock/test_agent_loop_mock.py tests/mock/test_mechanism_demo.py -v` | 9 passed |
+| 完整测试套件 | `pytest -q` | 806 passed, 5 skipped, 1 warning |
+| Lint | `python -m ruff check harness webui tests demo` | All checks passed |
+| 类型检查 | `python -m mypy harness webui tests demo` | Success: no issues found in 58 source files |
+| 凭据扫描 | `rg -n "(sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY)" .` | 仅既有 fake key 占位符和历史日志引用 |
+
+**Commit hash**：`3592d45` (`refactor(T23): complete mechanism demo reviews [subagent: Dewey/Sagan; human: pending review]`)
+
+**人工干预**：
+- 用户要求继续下一个任务，并说明 T22 已检验和 push。
+- 用户提示网络已连接；本任务未使用网络。
+- Git staging/commit 因 `.git` 写入限制需要提升权限；已用于本地 `git add` / `git commit`。
+- 未 push、未 merge、未创建 PR；人工 review 仍 pending。
+
+**教训**：
+1. 演示脚本不能只打印状态；作为验收命令时必须自校验并用 exit code 表达失败。
+2. 机制演示可以复用真实 AgentLoop/guard/feedback/tracker，同时用小型测试 double 隔离真实 pytest 和文件系统副作用。
+3. Windows 主环境下 Makefile target 内容也要避免 `python3` 假设，即使本机没有 `make` 可执行文件。

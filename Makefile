@@ -16,7 +16,7 @@ typecheck:
 	mypy harness/
 
 demo:
-	python3 -m demo.run_demo
+	python -m demo.run_demo
 
 build:
 	python3 -m build
