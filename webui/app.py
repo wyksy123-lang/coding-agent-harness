@@ -1,36 +1,29 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 
 from harness.models import HITLRequest
 from webui.websocket import WebSocketStatusEndpoint, WebUIState
 
-_INDEX_HTML = """<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>Coding Agent Harness</title>
-</head>
-<body>
-  <main id="app">Coding Agent Harness</main>
-</body>
-</html>
-"""
+_STATIC_DIR = Path(__file__).with_name("static")
 
 
 def create_app(state: WebUIState | None = None) -> FastAPI:
     webui_state = state or WebUIState()
     app = FastAPI(title="Coding Agent Harness")
     app.state.webui_state = webui_state
+    app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
     websocket_endpoint = WebSocketStatusEndpoint(webui_state)
 
     @app.get("/", response_class=HTMLResponse)
-    async def root() -> HTMLResponse:
-        return HTMLResponse(_INDEX_HTML)
+    async def root() -> FileResponse:
+        return FileResponse(_STATIC_DIR / "index.html", media_type="text/html")
 
     @app.get("/api/status")
     async def get_status() -> dict[str, Any]:

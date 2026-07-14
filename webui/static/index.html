@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Coding Agent Harness</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main id="app">
+    <section class="status-panel" aria-labelledby="status-heading">
+      <h1 id="status-heading">Coding Agent Harness</h1>
+      <dl class="status-grid">
+        <div>
+          <dt>Phase</dt>
+          <dd id="phase-value">idle</dd>
+        </div>
+        <div>
+          <dt>Tests</dt>
+          <dd id="test-status-value">unknown</dd>
+        </div>
+        <div>
+          <dt>Failure</dt>
+          <dd id="failure-type-value">none</dd>
+        </div>
+        <div>
+          <dt>Round</dt>
+          <dd id="round-number-value">0</dd>
+        </div>
+        <div>
+          <dt>Strategy</dt>
+          <dd id="strategy-value">none</dd>
+        </div>
+        <div>
+          <dt>Stop</dt>
+          <dd id="stop-reason-value">running</dd>
+        </div>
+      </dl>
+    </section>
+
+    <section class="hitl-panel" aria-labelledby="hitl-heading">
+      <h2 id="hitl-heading">HITL approvals</h2>
+      <div id="hitl-list" aria-live="polite"></div>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>
