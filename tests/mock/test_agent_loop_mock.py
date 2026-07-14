@@ -6,7 +6,7 @@ from typing import Any
 
 from harness.agent_loop import AgentLoop
 from harness.governance.hitl import HITLState
-from harness.llm.base import ToolCall
+from harness.llm.base import LLMClient, LLMResponse, ToolCall
 from harness.llm.mock import MockLLMClient
 from harness.memory.retriever import MemoryRetriever
 from harness.models import Config, FailureType, HITLRequest, HITLStatus, StopReason
@@ -62,6 +62,9 @@ class SequencedRunTestsTool(Tool):
 
 
 class FinishTool(Tool):
+    def __init__(self) -> None:
+        self.calls = 0
+
     @property
     def name(self) -> str:
         return "finish"
@@ -75,6 +78,7 @@ class FinishTool(Tool):
         }
 
     def execute(self, args: dict[str, Any]) -> ToolResult:
+        self.calls += 1
         return ToolResult(success=True, output={})
 
 
@@ -87,6 +91,46 @@ class RecordingHITLState(HITLState):
         request = super().create(action, timeout)
         self.created.append(request)
         return request
+
+
+class FeedbackSensitiveLLM(LLMClient):
+    def __init__(self) -> None:
+        self.recorded_calls: list[list[dict[str, Any]]] = []
+
+    def chat(
+        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
+    ) -> LLMResponse:
+        del tools
+        self.recorded_calls.append(list(messages))
+        if len(self.recorded_calls) == 1:
+            return LLMResponse(
+                content="",
+                finish_reason="tool_calls",
+                tool_calls=[_tool_call("run_tests", call_id="first-red")],
+            )
+        prompt = "\n".join(str(message.get("content", "")) for message in messages)
+        if "failure_type: ASSERTION" not in prompt:
+            return LLMResponse(content="missing feedback", finish_reason="stop")
+        if len(self.recorded_calls) == 2:
+            return LLMResponse(
+                content="",
+                finish_reason="tool_calls",
+                tool_calls=[
+                    _tool_call(
+                        "write_file",
+                        {
+                            "path": "app.py",
+                            "content": "def fixed() -> bool:\n    return True\n",
+                        },
+                        call_id="write-fix-after-feedback",
+                    )
+                ],
+            )
+        return LLMResponse(
+            content="",
+            finish_reason="tool_calls",
+            tool_calls=[_tool_call("run_tests", call_id="green-after-fix")],
+        )
 
 
 def _config(tmp_path: Path, *, max_rounds: int = 8, stuck_threshold: int = 3) -> Config:
@@ -158,6 +202,7 @@ def test_mock_llm_drives_full_tdd_loop_and_records_memory(tmp_path: Path) -> Non
     config = _config(tmp_path)
     write_file = RecordingWriteFileTool()
     run_tests = SequencedRunTestsTool([_pytest_report(1), _pytest_report(0)])
+    finish = FinishTool()
     llm = MockLLMClient.from_tool_calls(
         [
             [
@@ -192,7 +237,7 @@ def test_mock_llm_drives_full_tdd_loop_and_records_memory(tmp_path: Path) -> Non
     loop = AgentLoop(
         config,
         llm,
-        _registry(config, write_file, run_tests, FinishTool()),
+        _registry(config, write_file, run_tests, finish),
     )
 
     result = loop.run("implement add with TDD")
@@ -205,7 +250,9 @@ def test_mock_llm_drives_full_tdd_loop_and_records_memory(tmp_path: Path) -> Non
         "PASS",
     ]
     assert result.rounds[-1].actions[-1].tool_name == "finish"
+    assert result.rounds[-1].strategy_used == "finish"
     assert run_tests.calls == 2
+    assert finish.calls == 1
     assert [write["path"] for write in write_file.writes] == [
         "tests/test_feature.py",
         "app.py",
@@ -240,25 +287,15 @@ def test_mock_llm_feedback_changes_next_action(tmp_path: Path) -> None:
     config = _config(tmp_path)
     write_file = RecordingWriteFileTool()
     run_tests = SequencedRunTestsTool([_pytest_report(1), _pytest_report(0)])
-    llm = MockLLMClient.from_tool_calls(
-        [
-            [_tool_call("run_tests", call_id="first-red")],
-            [
-                _tool_call(
-                    "write_file",
-                    {"path": "app.py", "content": "def fixed() -> bool:\n    return True\n"},
-                    call_id="write-fix-after-feedback",
-                )
-            ],
-            [_tool_call("run_tests", call_id="green-after-fix")],
-        ]
-    )
+    llm = FeedbackSensitiveLLM()
     loop = AgentLoop(config, llm, _registry(config, write_file, run_tests))
 
     result = loop.run("use feedback to fix the failure")
 
     assert result.status == StopReason.PASS
-    second_call_prompt = _all_message_text(llm, 1)
+    second_call_prompt = "\n".join(
+        str(message.get("content", "")) for message in llm.recorded_calls[1]
+    )
     assert "failure_type: ASSERTION" in second_call_prompt
     assert write_file.writes == [
         {"path": "app.py", "content": "def fixed() -> bool:\n    return True\n"}
@@ -267,12 +304,10 @@ def test_mock_llm_feedback_changes_next_action(tmp_path: Path) -> None:
 
 def test_mock_llm_dangerous_command_is_intercepted_by_hitl(tmp_path: Path) -> None:
     config = _config(tmp_path)
-    run_tests = SequencedRunTestsTool([_pytest_report(0)])
     hitl_state = RecordingHITLState()
     llm = MockLLMClient.from_tool_calls(
         [
             [_tool_call("run_command", {"cmd": "rm -rf .harness"}, call_id="danger")],
-            [_tool_call("run_tests", call_id="recover")],
         ]
     )
     loop = AgentLoop(
@@ -285,19 +320,19 @@ def test_mock_llm_dangerous_command_is_intercepted_by_hitl(tmp_path: Path) -> No
                 config.dangerous_command_patterns,
                 timeout=1,
             ),
-            run_tests,
         ),
         hitl_state=hitl_state,
     )
 
     result = loop.run("request a dangerous command")
 
-    assert result.status == StopReason.PASS
+    assert result.status == StopReason.HITL_DENIED
     assert result.rounds[0].outcome.value == "HITL_DENIED"
+    assert result.rounds[0].strategy_used == "hitl_pending"
     assert result.rounds[0].actions[0].args["cmd"] == "rm -rf .harness"
     assert hitl_state.created
-    assert hitl_state.created[0].status == HITLStatus.DENIED
-    assert "denied" in _all_message_text(llm, 1)
+    assert hitl_state.created[0].status == HITLStatus.PENDING
+    assert len(llm.recorded_calls) == 1
 
 
 def test_mock_llm_stopping_reasons_are_deterministic(tmp_path: Path) -> None:
