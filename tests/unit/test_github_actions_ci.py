@@ -21,6 +21,7 @@ def test_github_actions_workflow_triggers_on_push_and_main_pr() -> None:
     triggers = workflow["on"]
 
     assert "push" in triggers
+    assert triggers["push"] is None
     assert "pull_request" in triggers
     assert triggers["pull_request"]["branches"] == ["main"]
 
@@ -54,6 +55,9 @@ def test_github_actions_workflow_runs_project_ci_commands() -> None:
         for job_name in ["test", "lint", "typecheck"]
     }
 
-    assert "python -m pytest tests/ -v" in commands_by_job["test"]
-    assert "python -m ruff check harness/ tests/" in commands_by_job["lint"]
-    assert "python -m mypy harness/" in commands_by_job["typecheck"]
+    for job_name in ["test", "lint", "typecheck"]:
+        assert "pyproject.toml" in commands_by_job[job_name]
+        assert '["project"]["dependencies"]' in commands_by_job[job_name]
+    assert "make test" in commands_by_job["test"]
+    assert "make lint" in commands_by_job["lint"]
+    assert "make typecheck" in commands_by_job["typecheck"]
