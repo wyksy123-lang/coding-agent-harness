@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 WORKFLOW_PATH = Path(".github/workflows/ci.yml")
+PYPROJECT_PATH = Path("pyproject.toml")
 
 
 def _load_workflow() -> dict[str, Any]:
@@ -93,3 +95,12 @@ def test_github_actions_workflow_uses_portable_runner_commands() -> None:
 
     for fragment in forbidden_fragments:
         assert fragment not in workflow_text
+
+
+def test_project_declares_package_discovery_for_editable_ci_install() -> None:
+    with PYPROJECT_PATH.open("rb") as pyproject_file:
+        pyproject = tomllib.load(pyproject_file)
+
+    package_includes = pyproject["tool"]["setuptools"]["packages"]["find"]["include"]
+
+    assert set(package_includes) == {"harness*", "webui*", "demo*"}
