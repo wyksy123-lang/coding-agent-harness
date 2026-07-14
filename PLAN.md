@@ -738,7 +738,7 @@ T29 (final acceptance) ← depends on all
 11. **对应 worktree 和 PR 范围**: `feature/webui` / PR9
 12. **完成状态及 commit hash 记录位置**: 本文件 T21 行；AGENT_LOG.md
 
-**状态**: ⬜ TODO | **Commit**: —
+**状态**: ✅ DONE | **Commit**: 3d17135 (Red), 7bd7117 (Green), eeefe16 (Review)
 
 ---
 
