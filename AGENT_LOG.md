@@ -3838,3 +3838,59 @@
 - 用户要求继续下一个任务，并说明 T23 已检查和 push。
 - Git staging/commit 因 `.git` 写入限制需要提升权限；已用于本地 `git add` / `git commit`。
 - 未 push、未 merge、未创建 PR；人工 review 仍 pending。
+
+---
+
+## LOG-052 — T24 GitHub Actions CI Windows/Ubuntu hardening
+
+**时间**：2026-07-14
+**执行环境**：Windows Codex 当前 checkout（未创建嵌套 worktree）
+**Worktree**：`C:\Users\裴斐\Documents\coding-agent-harness-codex`
+**Branch**：`codex/task/T24-github-actions-ci`
+**Task**：T24 — GitHub Actions CI addendum
+
+**范围**：
+- 用户要求继续完善当前 T24，不开始 T25/T26，不 rebase/reset/squash，不 push，不创建新 PR。
+- 本轮只强化现有 GitHub Actions CI，使其可在 Windows 11 GitHub runner 和 Ubuntu runner 上从干净环境安装并运行。
+
+### Red 阶段
+
+**执行者**：Codex main agent
+**修改**：扩展 `tests/unit/test_github_actions_ci.py`，要求：
+- `test` / `lint` / `typecheck` jobs 使用 `runs-on: ${{ matrix.os }}`。
+- matrix 包含 `windows-latest`、`ubuntu-latest` 和 Python `3.11`。
+- setup-python 使用 pip cache 和 `cache-dependency-path: pyproject.toml`。
+- CI 命令使用 `python -m pytest`、`python -m ruff`、`python -m mypy`。
+- workflow 不使用 `make`、`python - <<`、`continue-on-error` 或 `|| true`。
+
+**Red 验证**：
+- `python -m pytest tests/unit/test_github_actions_ci.py -v` -> 3 failed, 1 passed。
+- 失败原因：现有 workflow 仍使用 `ubuntu-latest`、`python - <<'PY'` 和 `make test` / `make lint` / `make typecheck`。
+
+**Commit hash**：`cda2267` (`test(T24): require cross-platform CI matrix`)
+
+### Green 阶段
+
+**执行者**：Codex main agent
+**修改**：
+- `.github/workflows/ci.yml` 增加 Windows + Ubuntu matrix，固定 Python 3.11。
+- 三个 job 均使用 `python -m pip install --upgrade pip`、`python -m pip install -e .`、`python -m pip check`。
+- Tests job 运行 `python -m pytest tests/ -q`。
+- Ruff job 运行 `python -m ruff check harness/ webui/ demo/ tests/`。
+- Mypy job 运行 `python -m mypy harness/ webui/ demo/`。
+- `.gitignore` 增加 `.pytest-temp/`，避免本地 pytest 残留目录导致 `git status` 权限警告。
+
+**验证**：
+- `python -c "import yaml, pathlib; yaml.safe_load(pathlib.Path('.github/workflows/ci.yml').read_text(encoding='utf-8')); print('workflow yaml: OK')"` -> `workflow yaml: OK`
+- `python -m pytest tests/unit/test_github_actions_ci.py -v` -> 4 passed
+- `python -m pytest tests/ -q` -> 811 passed, 5 skipped, 1 warning
+- `python -m ruff check harness/ webui/ demo/ tests/` -> All checks passed
+- `python -m mypy harness/ webui/ demo/` -> Success: no issues found in 32 source files
+- `python -m pip check` -> No broken requirements found
+- `git diff --check` -> no whitespace errors
+
+**Commit hash**：`190e9de` (`fix(T24): validate Windows and Ubuntu CI runners`)
+
+**远程验证说明**：
+- Codex 本地只能验证 workflow 文件、回归测试、lint/typecheck 和 dependency check。
+- push 后仍需人工确认 GitHub Actions 上 6 个 matrix jobs：Tests/Ruff/Mypy × windows-latest/ubuntu-latest。
