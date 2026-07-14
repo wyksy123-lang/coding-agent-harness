@@ -301,15 +301,15 @@ class TestCommandGuardNoneInputs:
     """None inputs must be handled defensively (ALLOW — nothing to match)."""
 
     def test_none_command_allowed(self):
-        result = CommandGuard.check(None, DEFAULT_PATTERNS)  # type: ignore[arg-type]
+        result = CommandGuard.check(None, DEFAULT_PATTERNS)
         assert result == GuardResult.ALLOW
 
     def test_none_patterns_allowed(self):
-        result = CommandGuard.check("rm -rf /", None)  # type: ignore[arg-type]
+        result = CommandGuard.check("rm -rf /", None)
         assert result == GuardResult.ALLOW
 
     def test_none_command_none_patterns_allowed(self):
-        result = CommandGuard.check(None, None)  # type: ignore[arg-type]
+        result = CommandGuard.check(None, None)
         assert result == GuardResult.ALLOW
 
 
@@ -317,19 +317,15 @@ class TestCommandGuardNonStringInputs:
     """Non-string inputs must be handled defensively."""
 
     def test_non_string_command_int_allowed(self):
-        result = CommandGuard.check(42, DEFAULT_PATTERNS)  # type: ignore[arg-type]
+        result = CommandGuard.check(42, DEFAULT_PATTERNS)
         assert result == GuardResult.ALLOW
 
     def test_non_string_command_list_allowed(self):
-        result = CommandGuard.check(
-            ["rm", "-rf"], DEFAULT_PATTERNS  # type: ignore[arg-type]
-        )
+        result = CommandGuard.check(["rm", "-rf"], DEFAULT_PATTERNS)
         assert result == GuardResult.ALLOW
 
     def test_non_string_command_dict_allowed(self):
-        result = CommandGuard.check(
-            {"cmd": "rm -rf"}, DEFAULT_PATTERNS  # type: ignore[arg-type]
-        )
+        result = CommandGuard.check({"cmd": "rm -rf"}, DEFAULT_PATTERNS)
         assert result == GuardResult.ALLOW
 
     def test_non_string_pattern_element_skipped(self):

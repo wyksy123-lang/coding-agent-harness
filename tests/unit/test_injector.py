@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 
 import harness.feedback as feedback
-
 from harness.feedback.injector import FeedbackInjector
+from harness.memory.retriever import MemoryRetriever
 from harness.models import Failure, FailureType, MemoryEntry, TestResult
-
 
 EXPECTED_STRATEGY_HINTS = {
     FailureType.ASSERTION: (
@@ -107,7 +108,7 @@ def test_each_failure_type_returns_deterministic_strategy_hint(
     feedback = FeedbackInjector.inject(
         _test_result(_failure(failure_type)),
         failure_type,
-        memory,
+        cast(MemoryRetriever, memory),
     )
 
     assert feedback.failure_type == failure_type

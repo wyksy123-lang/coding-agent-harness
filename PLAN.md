@@ -1010,3 +1010,21 @@ T29 (final acceptance) ← depends on all
 3. **Refactor**: 重构后全部测试仍通过的输出
 
 commit message 格式: `feat(TXX): <描述> [subagent: <ID>, human: <修改内容>]`
+
+# FIX-WIN-01: Windows Native Compatibility
+
+1. **Task ID**: FIX-WIN-01
+2. **Goal**: Make Windows 11 + PowerShell + native Python a first-class supported runtime while preserving Linux/Docker compatibility and existing security boundaries.
+3. **Files touched**: `harness/tools/file_ops.py`, `harness/tools/shell.py`, `tests/unit/test_file_ops.py`, `tests/unit/test_shell.py`, `pyproject.toml`, `webui/app.py`, static-check cleanup files, and task evidence docs.
+4. **Failure classification**:
+   - Windows incompatibility: direct `os.O_NOFOLLOW`, POSIX `python3`/`pwd`/`sleep`, symlink privilege assumptions.
+   - Missing dev dependency: `pytest-json-report` is declared in `pyproject.toml` but absent from the active Windows Python environment; `RunTestsTool` now has an offline fallback JSON report path.
+   - Test design errors: symlink tests skipped based only on `hasattr(os, "symlink")`; fixed with actual capability probing.
+   - Real implementation defects: file operations lacked Windows no-follow fallback; `RunTestsTool` used shell execution for pytest command parsing.
+5. **Red command**: `python -m pytest tests/unit/test_file_ops.py tests/unit/test_shell.py -q --tb=short` failed for missing Windows behavior.
+6. **Green commands**: focused tests `135 passed, 2 skipped`; full pytest `797 passed, 5 skipped, 1 warning`.
+7. **Final verification**: `python -m pytest -q`, `python -m ruff check harness webui tests`, and `python -m mypy harness webui tests` all pass.
+8. **Commits**: Red `505acdf`; Green `4e3d9f1`; Refactor/verification `67d5dfc`; Docs recorded in `AGENT_LOG.md`.
+9. **Status**: DONE, pending human review/push/PR.
+
+---

@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from typing import ClassVar
 
 from harness.memory.retriever import MemoryRetriever
-from harness.models import FeedbackMessage, Failure, FailureType, MemoryEntry, TestResult
+from harness.models import Failure, FailureType, FeedbackMessage, MemoryEntry, TestResult
 
 logger = logging.getLogger(__name__)
 

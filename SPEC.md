@@ -842,3 +842,9 @@ pip install coding-agent-harness
 | R047 (一维度深入) | §3.3, §9.5 | 已覆盖 |
 | R049 (四类机制) | §9.1-§9.4 | 已覆盖 |
 | R054 (机制演示) | §10.3 (AC17-AC19) | 已覆盖 |
+
+# FIX-WIN-01 Platform Scope Addendum
+
+The primary supported local development and verification environment is Windows 11 with PowerShell and native Python. Linux and Docker remain supported compatibility and deployment environments. Cross-platform fixes must preserve PathGuard, CommandGuard, credential protection, symlink/reparse-point safeguards, and target-directory boundary checks; deterministic tests must not use real network, real LLMs, or real credentials.
+
+---
