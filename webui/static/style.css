@@ -26,6 +26,11 @@ dd {
   margin: 0;
 }
 
+#connection-status {
+  color: #5d6b7c;
+  margin-top: 8px;
+}
+
 .status-panel,
 .hitl-panel {
   background: #ffffff;
@@ -87,6 +92,11 @@ pre {
   display: flex;
   gap: 8px;
   margin-top: 12px;
+}
+
+.hitl-error {
+  color: #b42318;
+  margin-top: 10px;
 }
 
 button {

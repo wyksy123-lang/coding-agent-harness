@@ -22,8 +22,12 @@ def test_get_root_returns_html_page() -> None:
     for element_id in [
         "phase-value",
         "test-status-value",
+        "passed-count-value",
+        "failed-count-value",
         "failure-type-value",
+        "failure-details-value",
         "round-number-value",
+        "strategy-value",
         "stop-reason-value",
         "hitl-list",
     ]:
@@ -50,7 +54,9 @@ def test_get_status_returns_current_agent_status() -> None:
         phase="green",
         round_number=2,
         test_status="PASS",
+        test_summary={"passed": 3, "failed": 0},
         failure_type=None,
+        failure_details=[],
         strategy="tests_passed",
         stop_reason="PASS",
     )
@@ -63,7 +69,9 @@ def test_get_status_returns_current_agent_status() -> None:
         "phase": "green",
         "round_number": 2,
         "test_status": "PASS",
+        "test_summary": {"passed": 3, "failed": 0},
         "failure_type": None,
+        "failure_details": [],
         "strategy": "tests_passed",
         "stop_reason": "PASS",
         "pending_hitl": [],
@@ -144,8 +152,33 @@ def test_status_redacts_sensitive_hitl_action_args() -> None:
     response = client.get("/api/status")
 
     pending = response.json()["pending_hitl"]
-    assert pending[0]["action"]["args"]["cmd"] == "[redacted]"
+    assert pending[0]["action"]["args"]["cmd"] == "cat [redacted]"
     assert pending[0]["action"]["args"]["api_key"] == "[redacted]"
+
+
+def test_status_redacts_path_like_hitl_action_args() -> None:
+    state = WebUIState()
+    state.hitl_state.create(
+        Action(
+            tool_name="run_command",
+            args={
+                "path": "workspace/foo.py",
+                "cwd": "D:\\repo",
+                "cmd": "type D:\\repo\\secret.txt",
+                "nested": {"target_directory": "src/module.py"},
+            },
+        ),
+        timeout=30,
+    )
+    client = TestClient(create_app(state))
+
+    response = client.get("/api/status")
+
+    args = response.json()["pending_hitl"][0]["action"]["args"]
+    assert args["path"] == "[redacted]"
+    assert args["cwd"] == "[redacted]"
+    assert args["cmd"] == "type [redacted]"
+    assert args["nested"]["target_directory"] == "[redacted]"
 
 
 def test_hitl_approval_endpoint_updates_pending_request() -> None:

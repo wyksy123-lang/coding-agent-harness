@@ -10,6 +10,7 @@
   <main id="app">
     <section class="status-panel" aria-labelledby="status-heading">
       <h1 id="status-heading">Coding Agent Harness</h1>
+      <p id="connection-status">connecting</p>
       <dl class="status-grid">
         <div>
           <dt>Phase</dt>
@@ -20,8 +21,20 @@
           <dd id="test-status-value">unknown</dd>
         </div>
         <div>
+          <dt>Passed</dt>
+          <dd id="passed-count-value">0</dd>
+        </div>
+        <div>
+          <dt>Failed</dt>
+          <dd id="failed-count-value">0</dd>
+        </div>
+        <div>
           <dt>Failure</dt>
           <dd id="failure-type-value">none</dd>
+        </div>
+        <div>
+          <dt>Details</dt>
+          <dd id="failure-details-value">none</dd>
         </div>
         <div>
           <dt>Round</dt>

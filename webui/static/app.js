@@ -1,25 +1,79 @@
 const statusFields = {
   phase: document.getElementById("phase-value"),
   test_status: document.getElementById("test-status-value"),
+  passed: document.getElementById("passed-count-value"),
+  failed: document.getElementById("failed-count-value"),
   failure_type: document.getElementById("failure-type-value"),
+  failure_details: document.getElementById("failure-details-value"),
   round_number: document.getElementById("round-number-value"),
   strategy: document.getElementById("strategy-value"),
   stop_reason: document.getElementById("stop-reason-value"),
 };
 const hitlList = document.getElementById("hitl-list");
+const connectionStatus = document.getElementById("connection-status");
+const sensitiveNamePattern = /(api[_-]?key|token|secret|password|path|cwd|dir|directory|file)/i;
+const sensitiveContentPattern = /(api[_-]?key|token|secret|password)\s*[:=]\s*\S+/gi;
+const pathLikePattern = /([A-Za-z]:\\\S+|\\\\\S+|\/\S+|\S*[\\/]\S+|[\w.-]+\.[A-Za-z0-9]{1,8})/g;
 
 function valueOrFallback(value, fallback) {
   return value === null || value === undefined || value === "" ? fallback : String(value);
 }
 
+function sanitizeForDisplay(name, value) {
+  if (sensitiveNamePattern.test(name)) {
+    return "[redacted]";
+  }
+  if (typeof value === "string") {
+    return value
+      .replace(sensitiveContentPattern, "$1=[redacted]")
+      .replace(/\S*\.env\S*/g, "[redacted]")
+      .replace(/C:\\Users\\\S+/g, "[redacted]")
+      .replace(pathLikePattern, "[redacted]");
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeForDisplay(name, item));
+  }
+  if (value && typeof value === "object") {
+    const sanitized = {};
+    for (const [childName, childValue] of Object.entries(value)) {
+      sanitized[childName] = sanitizeForDisplay(childName, childValue);
+    }
+    return sanitized;
+  }
+  return value;
+}
+
 function renderStatus(status) {
+  if (!status || typeof status !== "object") {
+    return;
+  }
   statusFields.phase.textContent = valueOrFallback(status.phase, "idle");
   statusFields.test_status.textContent = valueOrFallback(status.test_status, "unknown");
+  const summary =
+    status.test_summary && typeof status.test_summary === "object" ? status.test_summary : {};
+  statusFields.passed.textContent = valueOrFallback(summary.passed, "0");
+  statusFields.failed.textContent = valueOrFallback(summary.failed, "0");
   statusFields.failure_type.textContent = valueOrFallback(status.failure_type, "none");
+  statusFields.failure_details.textContent = renderFailureDetails(status.failure_details);
   statusFields.round_number.textContent = valueOrFallback(status.round_number, "0");
   statusFields.strategy.textContent = valueOrFallback(status.strategy, "none");
   statusFields.stop_reason.textContent = valueOrFallback(status.stop_reason, "running");
-  renderHitl(status.pending_hitl || []);
+  renderHitl(Array.isArray(status.pending_hitl) ? status.pending_hitl : []);
+}
+
+function renderFailureDetails(details) {
+  if (!Array.isArray(details) || details.length === 0) {
+    return "none";
+  }
+  return details
+    .map((detail) => {
+      if (!detail || typeof detail !== "object") {
+        return "";
+      }
+      return valueOrFallback(detail.message, JSON.stringify(detail));
+    })
+    .filter(Boolean)
+    .join("; ");
 }
 
 function renderHitl(requests) {
@@ -33,53 +87,90 @@ function renderHitl(requests) {
   }
 
   for (const request of requests) {
+    const hitlRequest = request && typeof request === "object" ? request : {};
     const item = document.createElement("article");
     item.className = "hitl-item";
 
     const title = document.createElement("h3");
-    title.textContent = `${request.action.tool_name} · ${request.request_id}`;
+    const requestId = valueOrFallback(hitlRequest.request_id, "unknown-request");
+    const action =
+      hitlRequest.action && typeof hitlRequest.action === "object" ? hitlRequest.action : {};
+    title.textContent = `${valueOrFallback(action.tool_name, "unknown tool")} - ${requestId}`;
 
     const args = document.createElement("pre");
-    args.textContent = JSON.stringify(request.action.args, null, 2);
+    args.textContent = JSON.stringify(sanitizeForDisplay("args", action.args || {}), null, 2);
+
+    const error = document.createElement("p");
+    error.className = "hitl-error";
+    error.hidden = true;
 
     const controls = document.createElement("div");
     controls.className = "hitl-actions";
     controls.append(
-      decisionButton(request.request_id, "approve", "Approve"),
-      decisionButton(request.request_id, "deny", "Deny"),
+      decisionButton(requestId, "approve", "Approve", error),
+      decisionButton(requestId, "deny", "Deny", error),
     );
 
-    item.append(title, args, controls);
+    item.append(title, args, error, controls);
     hitlList.append(item);
   }
 }
 
-function decisionButton(requestId, decision, label) {
+function decisionButton(requestId, decision, label, errorElement) {
   const button = document.createElement("button");
   button.type = "button";
   button.textContent = label;
   button.addEventListener("click", async () => {
-    button.disabled = true;
-    await fetch(`/api/hitl/${encodeURIComponent(requestId)}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ decision }),
+    const controls = button.closest(".hitl-actions");
+    const buttons = controls ? controls.querySelectorAll("button") : [button];
+    errorElement.hidden = true;
+    buttons.forEach((control) => {
+      control.disabled = true;
     });
+    try {
+      const response = await fetch(`/api/hitl/${encodeURIComponent(requestId)}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ decision }),
+      });
+      if (!response.ok) {
+        throw new Error(`approval failed with HTTP ${response.status}`);
+      }
+    } catch (error) {
+      errorElement.textContent = error instanceof Error ? error.message : "approval failed";
+      errorElement.hidden = false;
+      buttons.forEach((control) => {
+        control.disabled = false;
+      });
+    }
   });
   return button;
 }
 
 function connectWebSocket() {
+  connectionStatus.textContent = "connecting";
   const protocol = window.location.protocol === "https:" ? "wss" : "ws";
   const socket = new WebSocket(`${protocol}://${window.location.host}/ws`);
 
+  socket.addEventListener("open", () => {
+    connectionStatus.textContent = "connected";
+  });
   socket.addEventListener("message", (event) => {
-    const message = JSON.parse(event.data);
-    if (message.type === "status") {
+    let message;
+    try {
+      message = JSON.parse(event.data);
+    } catch {
+      return;
+    }
+    if (message && message.type === "status" && typeof message.status === "object") {
       renderStatus(message.status);
     }
   });
+  socket.addEventListener("error", () => {
+    connectionStatus.textContent = "offline";
+  });
   socket.addEventListener("close", () => {
+    connectionStatus.textContent = "reconnecting";
     window.setTimeout(connectWebSocket, 1000);
   });
 }
