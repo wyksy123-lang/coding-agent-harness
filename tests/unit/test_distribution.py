@@ -5,7 +5,6 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-
 PYPROJECT_PATH = Path("pyproject.toml")
 DOCKERFILE_PATH = Path("Dockerfile")
 DOCKERIGNORE_PATH = Path(".dockerignore")
@@ -75,6 +74,16 @@ def test_dockerignore_excludes_local_state_without_excluding_sources() -> None:
         "*.egg-info",
         ".env",
         ".env.*",
+        "*.key",
+        "*.pem",
+        "*.p12",
+        "secrets",
+        "credentials",
+        "!harness/credentials",
+        "!harness/credentials/**",
+        "auth.json",
+        "opencode.local.json",
+        "opencode.local.jsonc",
         "harness.yaml",
         "*.log",
     }

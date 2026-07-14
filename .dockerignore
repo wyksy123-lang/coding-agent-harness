@@ -16,6 +16,16 @@ build
 *.egg-info
 .env
 .env.*
+*.key
+*.pem
+*.p12
+secrets
+credentials
+!harness/credentials
+!harness/credentials/**
+auth.json
+opencode.local.json
+opencode.local.jsonc
 harness.yaml
 *.log
 logs

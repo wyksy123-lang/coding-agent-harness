@@ -34,6 +34,8 @@ venv/
 # Node
 node_modules/
 dist/
+build/
+.dist-test-venv/
 coverage/
 
 # IDE
