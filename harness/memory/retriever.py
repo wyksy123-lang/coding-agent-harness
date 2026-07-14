@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from harness.models import FailureType, MemoryEntry, RoundOutcome, RoundRecord
 

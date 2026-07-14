@@ -464,7 +464,7 @@ class TestHITLStateEdgeCases:
     def test_create_none_action_raises(self):
         """``create`` with ``None`` action must raise ``ValueError``."""
         with pytest.raises(ValueError, match="action"):
-            HITLState().create(None, timeout=300)  # type: ignore[arg-type]
+            HITLState().create(None, timeout=300)
 
     def test_multiple_instances_are_independent(self):
         """Two ``HITLState`` instances must not share state."""

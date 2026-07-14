@@ -123,11 +123,11 @@ class TestPathGuardEdgeCases:
         assert result == GuardResult.DENY
 
     def test_none_path_denied(self, tmp_workspace):
-        result = PathGuard.check(None, tmp_workspace)  # type: ignore[arg-type]
+        result = PathGuard.check(None, tmp_workspace)
         assert result == GuardResult.DENY
 
     def test_none_target_directory_denied(self, tmp_workspace):
-        result = PathGuard.check("file.txt", None)  # type: ignore[arg-type]
+        result = PathGuard.check("file.txt", None)
         assert result == GuardResult.DENY
 
     def test_null_byte_in_path_denied(self, tmp_workspace):
