@@ -31,10 +31,16 @@ python -m pip check
 Docker image install, after an image has been published to your registry:
 
 ```powershell
-docker pull coding-agent-harness
+docker pull <registry>/coding-agent-harness
 ```
 
-For a source checkout, the current release artifacts can also be built locally:
+For a source checkout, install the release tooling before building local artifacts:
+
+```powershell
+python -m pip install build twine
+```
+
+Then build and check the current release artifacts locally:
 
 ```powershell
 python -m build
@@ -115,10 +121,16 @@ Run the Docker WebUI container:
 docker run -p 8000:8000 coding-agent-harness
 ```
 
-For a workspace-mounted run:
+For a workspace-mounted run on Windows PowerShell:
 
 ```powershell
 docker run -p 8000:8000 -v ${PWD}\workspace:/app/workspace coding-agent-harness
+```
+
+For a workspace-mounted run on Linux or macOS shells:
+
+```bash
+docker run -p 8000:8000 -v $(pwd)/workspace:/app/workspace coding-agent-harness
 ```
 
 Docker must be installed and available on `PATH` for the Docker commands.
