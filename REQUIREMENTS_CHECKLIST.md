@@ -102,7 +102,7 @@
 | R055 | 要求1 §4.7 | 公开 GitHub 仓库（私有仓需将助教加为协作者） | GitHub URL | 访问仓库 | TODO | — |
 | R056 | 要求1 §4.7 | 完整 commit 历史与 PR 工作流；拒绝单次 commit 提交全部代码；每个 worktree 对应一个 PR | git log + PR 链接 | 审查 commit/PR 历史 | TODO | — |
 | R057 | 要求1 §4.7 | commit message/PR 描述标注由哪个 subagent 完成、人工修改了哪些 | commit/PR | 审查描述 | TODO | — |
-| R058 | 要求1 §五.6 | CI 配置（.gitlab-ci.yml），必须包含一个名为 unit-test 的 job | .gitlab-ci.yml | 检查 job 名 | TODO | — |
+| R058 | 要求1 §五.6 | CI 配置（.gitlab-ci.yml），必须包含一个名为 unit-test 的 job | .gitlab-ci.yml | 检查 job 名 | DONE | T25: `.gitlab-ci.yml` includes exact `unit-test` job using `python:3.11`, pip cache, editable install, and `make test` |
 | R059 | 要求1 §五.7 | CI/CD 执行记录，最后一次必须是 pass 状态 | CI 截屏/日志 | 审查 CI 状态 | TODO | — |
 | R060 | 要求1 §五 | 通过同一个 NJU Git 仓库链接提交全部交付物 | NJU Git URL | 访问仓库 | TODO | — |
 
