@@ -4022,3 +4022,87 @@
 - 用户要求继续完成 T25。
 - Git staging/commit 因 `.git` 写入限制需要提升权限；已用于本地 `git add` / `git commit`。
 - 未 push、未 merge、未创建 PR；人工 review 仍 pending。
+
+---
+
+## LOG-055 - T26 Dockerfile + PyPI packaging
+
+**Timestamp**: 2026-07-14
+**Environment**: Windows Codex checkout, fixed project venv `./.venv/Scripts/python.exe`
+**Worktree**: `C:\Users\裴斐\Documents\coding-agent-harness-codex`
+**Branch**: `codex/task/T26-distribution`
+**Base main**: `dbfc926` (`Merge pull request #31 from wyksy123-lang/codex/task/T25-gitlab-ci`)
+**Task**: T26 - Dockerfile + PyPI packaging
+
+**Handoff / sync**:
+- User stated T25 was checked and pushed, and requested only T26, not T27/T28/T29.
+- Confirmed `HEAD`, `main`, and `origin/main` all at `dbfc9268a22f62005d51ba03e0bcce2ef4114743` after `git fetch origin main`.
+- Confirmed required Python: `./.venv/Scripts/python.exe`, Python 3.11.15.
+- Docker check: `docker version` and `docker info` failed because `docker` is not installed/available in this PowerShell environment.
+
+### Red phase
+
+**Subagent**: PackageScout (`019f60be-62fe-7c31-b127-d86c47f4bd92`)
+**Role**: read-only T26 distribution preparation.
+**Result**: recommended static distribution assertions and identified gaps: missing `Dockerfile`, `.dockerignore`, `[build-system]`, `[project.scripts]`, and WebUI package data.
+
+**Red test**:
+- Added `tests/unit/test_distribution.py` before implementation.
+- Command: `& $PY -m pytest tests/unit/test_distribution.py -v`
+- Result: 4 failed for missing T26 behavior: missing `build-system`, missing `package-data`, missing `Dockerfile`, and missing `.dockerignore`.
+- Failure classification: expected required-behavior gaps, not syntax/environment/dependency/test errors.
+
+**Commit**: `e2304d3` (`test(T26): add failing distribution tests [subagent: PackageScout; human: pending review]`)
+
+### Green phase
+
+**Implementation**:
+- Added `[build-system]`, inline package readme metadata, `[project.scripts] harness = "harness.cli:main"`, and WebUI static package data in `pyproject.toml`.
+- Added multi-stage `Dockerfile` based on `python:3.11-slim`, building a wheel and running installed WebUI with Uvicorn on `0.0.0.0:8000`.
+- Added `.dockerignore` for local state, generated artifacts, caches, and env files.
+- Added `.gitignore` coverage for generated package artifacts.
+
+**Green verification**:
+- `& $PY -m pytest tests/unit/test_distribution.py -v` -> 4 passed.
+- `& $PY -m pytest tests/ -q` -> 819 passed, 5 skipped, 1 warning.
+- `& $PY -m build` -> built `coding_agent_harness-0.1.0.tar.gz` and `coding_agent_harness-0.1.0-py3-none-any.whl`.
+- `& $PY -m twine check dist/*` -> both artifacts PASSED.
+- Wheel content inspection confirmed harness, webui, demo, WebUI static files, and `entry_points.txt`.
+
+**Commit**: `93c368c` (`feat(T26): add Python package and Docker distribution [subagent: PackageScout; human: pending review]`)
+
+### Refactor / Review phase
+
+**Specification Compliance Review**:
+- Reviewer: Meitner (`019f60cf-3c4f-7200-b0d4-6f68a2e73fd0`)
+- Result: no Critical implementation findings. Major process finding: docs/final evidence not yet complete at time of review.
+
+**Code Quality Review**:
+- Reviewer: Hume (`019f60e0-f85d-7e73-99b7-d077e4d72e88`)
+- Initial result: no Critical; one Major that `.dockerignore` did not mirror credential/provider-local exclusions from `.gitignore`.
+- Fix: added `*.key`, `*.pem`, `*.p12`, `secrets`, `credentials`, `!harness/credentials`, `!harness/credentials/**`, `auth.json`, `opencode.local.json`, and `opencode.local.jsonc` to `.dockerignore`; extended `tests/unit/test_distribution.py` assertions.
+- Re-review: Major resolved; no remaining Critical/Major issues.
+
+**Final verification**:
+- Target: `& $PY -m pytest tests/unit/test_distribution.py -v` -> 4 passed.
+- Full suite: `& $PY -m pytest tests/ -q` -> 819 passed, 5 skipped, 1 warning.
+- Ruff: `& $PY -m ruff check harness/ webui/ demo/ tests/` -> All checks passed.
+- Mypy: `& $PY -m mypy harness/ webui/ demo/` -> Success, no issues in 32 source files.
+- Dependency check: `& $PY -m pip check` -> No broken requirements found.
+- Build: `& $PY -m build` -> wheel and sdist built.
+- Twine: `& $PY -m twine check dist/*` -> both PASSED.
+- Fresh wheel venv: `.pytest-temp/t26-wheel-venv/Scripts/python.exe`, Python 3.11.15; installed built wheel from `dist/*.whl`; imports for `harness`, `webui`, `demo`, `from harness.cli import main`, WebUI static resource lookup, `harness --help`, `python -m demo.run_demo`, and `pip check` all passed from outside the repo.
+- Installed WebUI smoke: wheel-installed Uvicorn served `/` at `http://127.0.0.1:8765/` with HTTP 200; process stopped.
+- Credential scan: high-confidence scan found only existing explicit fake key fixture `tests/unit/test_llm_deepseek.py:15`.
+- Docker runtime: blocked because `docker` command is unavailable; Docker build/run not claimed as passed.
+
+**Commit**: `dd74c9e` (`refactor(T26): complete distribution reviews and verification [subagent: Meitner/Hume; human: pending review]`)
+
+**Human intervention**:
+- User required fixed Python `.\.venv\Scripts\python.exe`; all Python commands used `$PY` resolved to that path.
+- No push, no merge, no PyPI publish, no Docker image push, no T27/T28/T29 work.
+
+**Lessons**:
+1. Docker context hygiene must mirror credential ignore rules even when Dockerfile uses narrow `COPY`; remote builders can still receive the context.
+2. Wheel verification must include both archive content checks and fresh venv install from outside the repository to avoid accidental `sys.path` success.
+3. Docker runtime evidence must be reported separately from Dockerfile implementation when Docker is unavailable.
