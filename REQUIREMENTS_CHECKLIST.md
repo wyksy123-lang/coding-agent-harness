@@ -61,9 +61,9 @@
 
 | ID | 来源 | 义务 | 计划证据 | 验证方法 | 状态 | PLAN Task |
 |---|---|---|---|---|---|---|
-| R032 | 要求1 §3.2 | 选容器/二进制/包管理器一种或多种分发 | Dockerfile + PyPI 打包配置 | 检查分发产物存在 | TODO | — |
+| R032 | 要求1 §3.2 | 选容器/二进制/包管理器一种或多种分发 | Dockerfile + PyPI 打包配置 | 检查分发产物存在 | DONE (T26: Dockerfile, PyPI wheel/sdist, console script, and WebUI static package data complete; Docker runtime verification blocked because `docker` is unavailable in current environment) | T26 |
 | R033 | 要求1 §3.2 | README 写清：获取方式、运行命令、key 在目标机安全配置、已知限制 | README.md | 逐项检查 | TODO | — |
-| R034 | 要求1 §3.4 | 凭据与分发经得起"全新机器从零运行"检验 | 安装文档 + 测试记录 | fresh-machine 测试 | TODO | — |
+| R034 | 要求1 §3.4 | 凭据与分发经得起"全新机器从零运行"检验 | 安装文档 + 测试记录 | fresh-machine 测试 | IN PROGRESS (T26: built wheel installed into fresh Python 3.11 venv from outside repo; imports, `harness --help`, demo, installed WebUI HTTP 200, and `pip check` passed; install docs remain T27) | T26,T27 |
 | R035 | 要求1 §4.8 | 若选容器分发，CI 须构建镜像 | CI 配置 | 审查 CI build step | TODO | — |
 | R036 | 要求1 §4.11 | 可选云部署：提供截止前可访问公网地址；README 说明部署架构与 CI/CD；控制成本 | 部署 URL + README | 访问 URL 验证 | TODO | — |
 | R037 | 要求1 §五.9 | 线上部署 URL，必须提供应用可访问的 WebUI 接口 | 部署 URL | 访问验证 | TODO | — |
