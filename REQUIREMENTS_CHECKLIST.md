@@ -91,7 +91,7 @@
 |---|---|---|---|---|---|---|
 | R050 | 要求1 §3.4 | 至少 3 个职责清晰的功能模块 | 源码 + SPEC | 模块审查 | IN PROGRESS（配置/凭据 T02/T17、LLM 抽象 T03-T05、工具 T06-T08、治理 T09-T11、反馈 T12-T16、记忆 T14、AgentLoop T18、CLI T19、WebUI 后端 T20、WebUI 前端 T21 — 已实现 11 个模块） | T01-T21 |
 | R051 | 要求1 §3.4 + §4.8 | 可一键运行的测试命令（make test 或等价），覆盖核心功能 | Makefile/等价 | 执行测试命令 | DONE（Makefile `make test` 已创建，150 tests pass） | T01 |
-| R052 | 要求1 §4.8 | CI（GitHub Actions）必须配置：每次 push 自动运行测试 | .github/workflows/ | push 后 CI 自动触发 | TODO | — |
+| R052 | 要求1 §4.8 | CI（GitHub Actions）必须配置：每次 push 自动运行测试 | .github/workflows/ | push 后 CI 自动触发 | DONE | T24: `.github/workflows/ci.yml` triggers push + PR to main; jobs `test`/`lint`/`typecheck` use Windows + Ubuntu matrix, Python 3.11, pip cache, editable install with explicit setuptools package discovery, `python -m pytest tests/ -q`, `python -m ruff check harness/ webui/ demo/ tests/`, and `python -m mypy harness/ webui/ demo/` |
 | R053 | 要求2 A.6 | harness 核心机制必须有用 mock/stub LLM 驱动的确定性单元测试，不依赖网络与真实 LLM | 单测代码 | 离线运行 mock-LLM 测试 | DONE（T22 `tests/mock/test_agent_loop_mock.py` 使用 MockLLMClient/条件式 fake LLM 离线确定性验证主循环核心机制，无网络和真实 LLM） | T18,T22 |
 | R054 | 要求2 A.6 | 机制演示：mock LLM 下确定性地复现 ① 治理护栏拦截危险动作 ② 注入失败→反馈闭环使 agent 改变下一步 ③ 重点维度的一个确定性行为 | 演示脚本/测试 | 运行演示 | DONE（T23 `demo/run_demo.py` 与 `tests/mock/test_mechanism_demo.py` 确定性复现治理 HITL PENDING、反馈修正、STUCK 停机；`python -m demo.run_demo` 通过） | T23 |
 

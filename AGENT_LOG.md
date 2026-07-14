@@ -3742,3 +3742,197 @@
 1. 演示脚本不能只打印状态；作为验收命令时必须自校验并用 exit code 表达失败。
 2. 机制演示可以复用真实 AgentLoop/guard/feedback/tracker，同时用小型测试 double 隔离真实 pytest 和文件系统副作用。
 3. Windows 主环境下 Makefile target 内容也要避免 `python3` 假设，即使本机没有 `make` 可执行文件。
+
+---
+
+## LOG-051 — T24 GitHub Actions CI
+
+**时间**：2026-07-14
+**执行环境**：Windows Codex 当前 checkout（未创建嵌套 worktree）
+**Worktree**：`C:\Users\裴斐\Documents\coding-agent-harness-codex`
+**Branch**：`codex/task/T24-github-actions-ci`
+**Base main**：`429f14b` (`Merge pull request #29 from wyksy123-lang/codex/task/T23-mechanism-demo`)
+**Task**：T24 — GitHub Actions CI
+
+**接管 / 同步记录**：
+- 用户说明 T23 已检查并 push，可继续下一任务。
+- `git fetch origin main` 后确认 `main` / `origin/main` 位于 T23 merge commit `429f14b`，且 `1fa2e11` T23 docs commit 已包含在 HEAD。
+- 从最新 `main` 创建 `codex/task/T24-github-actions-ci`；本轮只执行 T24，未 push、未 merge、未开始 T25/T26。
+
+### Red 阶段
+
+**subagent 信息**：
+- 名称：Bernoulli
+- Agent ID：`019f5ff1-b193-7723-910a-5ca743d0fd44`
+- 任务：只读分析 T24 workflow 结构、Red 测试断言、Green 验证命令和 Windows/Linux 兼容风险。
+- 结果：建议 `CI` workflow 使用 quoted `"on"`、push + PR to main、`test`/`lint`/`typecheck` jobs、Python 3.11、pip cache，并以本地结构测试验证。
+
+**Red 执行内容**：
+- 新增 `tests/unit/test_github_actions_ci.py`。
+- 覆盖 `.github/workflows/ci.yml` YAML 可解析、push 任意分支、PR to main、三个 job、checkout/setup-python/pip cache、项目 CI 命令。
+
+**Red 验证**：
+- PLAN Red 命令：`python -c "import yaml; yaml.safe_load(open('.github/workflows/ci.yml'))"`
+- 结果：`FileNotFoundError: [Errno 2] No such file or directory: '.github/workflows/ci.yml'`
+- 目标测试：`pytest tests/unit/test_github_actions_ci.py -v` -> 3 failed，均因 `.github/workflows/ci.yml` 缺失。
+- 判定：失败由 T24 目标 workflow 缺失导致，非语法、环境、依赖或测试自身错误。
+
+**Commit hash**：`9a6f858` (`test(T24): add failing GitHub Actions checks [subagent: Bernoulli; human: pending review]`)
+
+### Green 阶段
+
+**执行者**：Codex 主 agent
+
+**执行内容**：
+- 新增 `.github/workflows/ci.yml`。
+- workflow 触发：push 任意分支、pull_request to `main`。
+- jobs：`test`、`lint`、`typecheck`，均使用 `ubuntu-latest`、`actions/checkout@v4`、`actions/setup-python@v5`、Python 3.11、pip cache。
+
+**Green 验证**：
+- `python -c "import yaml; yaml.safe_load(open('.github/workflows/ci.yml'))"` -> pass
+- `pytest tests/unit/test_github_actions_ci.py -v` -> 3 passed
+- `python -m ruff check tests/unit/test_github_actions_ci.py` -> All checks passed
+- `mypy tests/unit/test_github_actions_ci.py` -> Success
+- `python -m pytest tests/ -v` -> 809 passed, 5 skipped, 1 warning
+- `python -m ruff check harness/ tests/` -> All checks passed
+- `python -m mypy harness/` -> Success: no issues found in 27 source files
+
+**Commit hash**：`6bdda29` (`feat(T24): add GitHub Actions CI workflow [subagent: Bernoulli; human: pending review]`)
+
+### Refactor / Review 阶段
+
+**Specification Compliance Review**：
+- Reviewer：Ramanujan
+- Agent ID：`019f5ff8-8a00-7b11-b406-be57cba25b3f`
+- 结果：Critical 0；Major 1；Minor 3。
+- Major：workflow 内联 `python -m pytest/ruff/mypy`，未贴合 PLAN 的 `make test` / `make lint` / `make typecheck`。
+
+**Code Quality Review**：
+- Reviewer：Averroes
+- Agent ID：`019f5ff8-9e62-7aa3-9fc9-f38045480481`
+- 结果：Critical 0；Major 3；Minor 2。
+- Major：命令复制导致 Makefile 漂移；手写依赖列表与 `pyproject.toml` 漂移；建议考虑 Windows matrix。
+
+**Review fix / Refactor 内容**：
+- workflow 改为运行 `make test`、`make lint`、`make typecheck`，贴合 PLAN T24。
+- 依赖安装改为在 CI 中从 `pyproject.toml` 的 `[project.dependencies]` 读取并传给 pip，避免手写依赖列表漂移。
+- 测试新增断言 `push:` 未限制分支，并断言 CI 命令使用 Makefile targets 和 `pyproject.toml` 依赖来源。
+- 未添加 Windows matrix：T24 PLAN 未要求多 OS；Windows runner 的 `make` 可用性会引入额外配置范围，留待后续 CI/平台任务决策。
+- 曾尝试验证 `python -m pip install -e . --no-deps`：沙箱内先因网络限制失败；授权后确认当前项目尚未到 T26 打包配置，editable install 因多顶层包自动发现失败。因此未采用 editable install，避免越界修改 PyPI packaging。
+
+### 最终验证
+
+| 检查项 | 命令 | 结果 |
+|---|---|---|
+| YAML 语法 | `python -c "import yaml; yaml.safe_load(open('.github/workflows/ci.yml', encoding='utf-8'))"` | pass |
+| 目标测试 | `pytest tests/unit/test_github_actions_ci.py -v` | 3 passed |
+| 完整测试套件 | `python -m pytest tests/ -v` | 809 passed, 5 skipped, 1 warning |
+| Lint | `python -m ruff check harness/ tests/` | All checks passed |
+| 类型检查 | `python -m mypy harness/` | Success: no issues found in 27 source files |
+| 凭据扫描 | `rg -n "(sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY)" .` | 仅既有 fake key 占位符和历史日志引用 |
+| PLAN 聚合命令 | `make test && make lint && make typecheck` | 当前 PowerShell 环境无 `make` 可执行文件；已运行等价 Python 命令并记录 |
+
+**Commit hash**：`4b818c5` (`refactor(T24): complete CI workflow reviews [subagent: Ramanujan/Averroes; human: pending review]`)
+
+**人工干预**：
+- 用户要求继续下一个任务，并说明 T23 已检查和 push。
+- Git staging/commit 因 `.git` 写入限制需要提升权限；已用于本地 `git add` / `git commit`。
+- 未 push、未 merge、未创建 PR；人工 review 仍 pending。
+
+---
+
+## LOG-052 — T24 GitHub Actions CI Windows/Ubuntu hardening
+
+**时间**：2026-07-14
+**执行环境**：Windows Codex 当前 checkout（未创建嵌套 worktree）
+**Worktree**：`C:\Users\裴斐\Documents\coding-agent-harness-codex`
+**Branch**：`codex/task/T24-github-actions-ci`
+**Task**：T24 — GitHub Actions CI addendum
+
+**范围**：
+- 用户要求继续完善当前 T24，不开始 T25/T26，不 rebase/reset/squash，不 push，不创建新 PR。
+- 本轮只强化现有 GitHub Actions CI，使其可在 Windows 11 GitHub runner 和 Ubuntu runner 上从干净环境安装并运行。
+
+### Red 阶段
+
+**执行者**：Codex main agent
+**修改**：扩展 `tests/unit/test_github_actions_ci.py`，要求：
+- `test` / `lint` / `typecheck` jobs 使用 `runs-on: ${{ matrix.os }}`。
+- matrix 包含 `windows-latest`、`ubuntu-latest` 和 Python `3.11`。
+- setup-python 使用 pip cache 和 `cache-dependency-path: pyproject.toml`。
+- CI 命令使用 `python -m pytest`、`python -m ruff`、`python -m mypy`。
+- workflow 不使用 `make`、`python - <<`、`continue-on-error` 或 `|| true`。
+
+**Red 验证**：
+- `python -m pytest tests/unit/test_github_actions_ci.py -v` -> 3 failed, 1 passed。
+- 失败原因：现有 workflow 仍使用 `ubuntu-latest`、`python - <<'PY'` 和 `make test` / `make lint` / `make typecheck`。
+
+**Commit hash**：`cda2267` (`test(T24): require cross-platform CI matrix`)
+
+### Green 阶段
+
+**执行者**：Codex main agent
+**修改**：
+- `.github/workflows/ci.yml` 增加 Windows + Ubuntu matrix，固定 Python 3.11。
+- 三个 job 均使用 `python -m pip install --upgrade pip`、`python -m pip install -e .`、`python -m pip check`。
+- Tests job 运行 `python -m pytest tests/ -q`。
+- Ruff job 运行 `python -m ruff check harness/ webui/ demo/ tests/`。
+- Mypy job 运行 `python -m mypy harness/ webui/ demo/`。
+- `.gitignore` 增加 `.pytest-temp/`，避免本地 pytest 残留目录导致 `git status` 权限警告。
+
+**验证**：
+- `python -c "import yaml, pathlib; yaml.safe_load(pathlib.Path('.github/workflows/ci.yml').read_text(encoding='utf-8')); print('workflow yaml: OK')"` -> `workflow yaml: OK`
+- `python -m pytest tests/unit/test_github_actions_ci.py -v` -> 4 passed
+- `python -m pytest tests/ -q` -> 811 passed, 5 skipped, 1 warning
+- `python -m ruff check harness/ webui/ demo/ tests/` -> All checks passed
+- `python -m mypy harness/ webui/ demo/` -> Success: no issues found in 32 source files
+- `python -m pip check` -> No broken requirements found
+- `git diff --check` -> no whitespace errors
+
+**Commit hash**：`190e9de` (`fix(T24): validate Windows and Ubuntu CI runners`)
+
+**远程验证说明**：
+- Codex 本地只能验证 workflow 文件、回归测试、lint/typecheck 和 dependency check。
+- push 后仍需人工确认 GitHub Actions 上 6 个 matrix jobs：Tests/Ruff/Mypy × windows-latest/ubuntu-latest。
+
+---
+
+## LOG-053 — T24 GitHub Actions editable install fix
+
+**时间**：2026-07-14
+**执行环境**：Windows Codex 当前 checkout（未创建嵌套 worktree）
+**Worktree**：`C:\Users\裴斐\Documents\coding-agent-harness-codex`
+**Branch**：`codex/task/T24-github-actions-ci`
+**Task**：T24 — GitHub Actions CI addendum
+
+**失败来源**：
+- GitHub Actions merge/checks 中 `python -m pip install -e .` 失败。
+- Ubuntu 日志显示 setuptools 在 flat layout 中发现多个顶层包：`demo`、`webui`、`harness`。
+- 因安装失败，Windows 后续 `python -m pytest`、`python -m ruff`、`python -m mypy` 报 `No module named ...`。
+
+### Red 阶段
+
+**执行者**：Codex main agent
+**修改**：在 `tests/unit/test_github_actions_ci.py` 增加回归测试，要求 `pyproject.toml` 显式声明 setuptools package discovery includes：`harness*`、`webui*`、`demo*`。
+
+**Red 验证**：
+- `python -m pytest tests/unit/test_github_actions_ci.py -v` -> 1 failed, 4 passed。
+- 失败原因：`KeyError: 'setuptools'`，说明 `pyproject.toml` 缺少 package discovery 配置。
+
+**Commit hash**：`fa71de6` (`test(T24): cover editable CI install package discovery`)
+
+### Green 阶段
+
+**执行者**：Codex main agent
+**修改**：
+- 在 `pyproject.toml` 增加 `[tool.setuptools.packages.find] include = ["harness*", "webui*", "demo*"]`。
+
+**验证**：
+- `python -m pytest tests/unit/test_github_actions_ci.py -v` -> 5 passed
+- `python -m pip install -e . --no-deps --no-build-isolation --target tmp\ci-editable-target --no-cache-dir` -> Successfully installed `coding-agent-harness-0.1.0`
+- `python -m pip wheel . --no-deps --no-build-isolation --wheel-dir tmp\ci-wheel-check` with `PIP_NO_CACHE_DIR=1` -> Successfully built `coding-agent-harness`
+- `python -m ruff check harness/ webui/ demo/ tests/` -> All checks passed
+- `python -m mypy harness/ webui/ demo/` -> Success: no issues found in 32 source files
+- `python -m pip check` -> No broken requirements found
+
+**Commit hash**：`f803688` (`fix(T24): declare packages for CI editable install`)

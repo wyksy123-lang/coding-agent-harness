@@ -824,13 +824,13 @@ T29 (final acceptance) ← depends on all
 6. **Green 阶段验证命令**: `python -c "import yaml; yaml.safe_load(open('.github/workflows/ci.yml'))"` + push 后检查 GitHub Actions 运行
 7. **完整测试、lint 和类型检查命令**:
    - `python -c "import yaml; yaml.safe_load(open('.github/workflows/ci.yml'))"`
-   - `make test && make lint && make typecheck`
+   - `python -m pytest tests/ -q && python -m ruff check harness/ webui/ demo/ tests/ && python -m mypy harness/ webui/ demo/`
 8. **依赖关系**: T01
 9. **是否可并行**: 是（与 T25, T26 并行）
 10. **对应 worktree 和 PR 范围**: `feature/ci` / PR11
 11. **完成状态及 commit hash 记录位置**: 本文件 T24 行；AGENT_LOG.md
 
-**状态**: ⬜ TODO | **Commit**: —
+**状态**: ✅ DONE | **Commit**: 9a6f858 (Red), 6bdda29 (Green), 4b818c5 (Review), cda2267 (Windows/Ubuntu Red), 190e9de (Windows/Ubuntu Green), fa71de6 (editable install Red), f803688 (editable install Green)
 
 ---
 

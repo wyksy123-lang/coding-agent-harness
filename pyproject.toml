@@ -16,6 +16,9 @@ dependencies = [
     "mypy",
 ]
 
+[tool.setuptools.packages.find]
+include = ["harness*", "webui*", "demo*"]
+
 [tool.ruff]
 line-length = 100
 target-version = "py311"

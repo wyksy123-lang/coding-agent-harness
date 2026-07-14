@@ -195,6 +195,12 @@ class RunTestsTool(Tool):
         }
 
     def execute(self, args: dict[str, Any]) -> ToolResult:
+        if not os.path.isdir(self._target_directory):
+            return ToolResult(
+                success=False,
+                output={},
+                error=f"target directory does not exist: {self._target_directory}",
+            )
         harness_dir = os.path.join(self._target_directory, ".harness")
         report_path = os.path.join(harness_dir, "report.json")
         try:
