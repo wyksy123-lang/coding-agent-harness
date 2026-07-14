@@ -801,7 +801,7 @@ T29 (final acceptance) ← depends on all
 11. **对应 worktree 和 PR 范围**: `feature/testing-demo` / PR10
 12. **完成状态及 commit hash 记录位置**: 本文件 T23 行；AGENT_LOG.md
 
-**状态**: ⬜ TODO | **Commit**: —
+**状态**: ✅ DONE | **Commit**: aba8999 (Red), 3797dfe (Green), 3592d45 (Review)
 
 ---
 
