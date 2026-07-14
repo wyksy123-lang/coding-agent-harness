@@ -3448,3 +3448,116 @@
 1. WebUI 安全不能只靠前端克制；敏感信息必须在后端序列化边界先脱敏，前端再兜底。
 2. HITL 脱敏要平衡可用性和安全性：完全隐藏命令会让审批不可判断，正确做法是保留动作语义、隐藏路径和凭据。
 3. 对轻量 JS 前端，即便没有完整浏览器测试，也要通过静态断言和后端状态测试锁住关键 DOM、资源和安全字段。
+
+---
+
+## LOG-048 — T22 Mock-LLM 集成测试
+
+**时间**：2026-07-14  
+**执行环境**：Windows Codex 当前 checkout（未创建嵌套 worktree）  
+**Worktree**：`C:\Users\裴斐\Documents\coding-agent-harness-codex`  
+**Branch**：`codex/task/T22-mock-integration`  
+**Base main**：`0c3f01e` (`Merge pull request #26 from wyksy123-lang/codex/task/T21-webui-frontend`)  
+**Task**：T22 — Mock-LLM 集成测试
+
+**接管 / 同步记录**：
+- 用户说明 T21 已检查并 push，可继续下一任务。
+- `git status --short --branch` 显示 clean `main...origin/main`；`git log` 确认 `main` / `origin/main` 位于 T21 merge commit `0c3f01e`。
+- 从最新 `main` 创建 `codex/task/T22-mock-integration`；本轮只执行 T22，未 push、未 merge、未开始 T23。
+
+### Red 阶段
+
+**subagent 信息**：
+- 名称：Beauvoir
+- Agent ID：`019f5ec5-eaec-79c3-bb66-adf3d3676c4f`
+- 任务：只读分析 T22、AgentLoop、MockLLMClient、治理、反馈、记忆和测试注入点。
+- 结果：建议用真实 `MockLLMClient` 驱动 TDD 序列，用测试 double 隔离 pytest/文件系统 Windows 基线；指出 `finish_before_green` 是合适 Red 缺口，不越界到 T23。
+
+**Red 执行内容**：
+- 新增 `tests/mock/__init__.py` 与 `tests/mock/test_agent_loop_mock.py`。
+- 覆盖完整 mock TDD 循环、反馈驱动修正、危险命令 HITL、PASS/MAX_ROUNDS/STUCK 停机和记忆检索。
+- 所有测试使用 mock/stub LLM，不使用真实网络或真实 LLM。
+
+**Red 验证**：
+- `pytest tests/mock/test_agent_loop_mock.py -v` → 1 failed, 4 passed
+- 失败：`test_mock_llm_cannot_finish_before_green_tests` 发现 AgentLoop 在未跑出绿色测试前把 `finish` 直接当 PASS。
+- 判定：失败由缺失 T22 主循环行为导致，非语法、环境、依赖或测试自身错误。
+
+**Commit hash**：`692adee` (`test(T22): add failing mock integration tests [subagent: Beauvoir; human: pending review]`)
+
+### Green 阶段
+
+**执行者**：Codex 主 agent
+
+**执行内容**：
+- `harness/agent_loop.py` 增加绿色测试门槛：`finish` 只有在已有 PASS `run_tests` 后才可完成；提前 `finish` 转为结构化失败反馈。
+
+**Green 验证**：
+- `pytest tests/mock/test_agent_loop_mock.py -v` → 5 passed
+- `pytest tests/unit/test_agent_loop.py -v` → 8 passed
+
+**Commit hash**：`9300dcb` (`feat(T22): enforce green tests before finish [subagent: Beauvoir; human: pending review]`)
+
+### Refactor / Review 阶段
+
+**Specification Compliance Review**：
+- Reviewer：Rawls
+- Agent ID：`019f5ed3-2be0-7103-b894-873aabab1d05`
+- 结果：Critical 2、Major 3、Minor 2。
+- Critical：
+  1. HITL PENDING 后被 AgentLoop 立即 `deny()`，没有保持人工审批边界。
+  2. happy path 中绿测后的同轮 `finish` 只出现在 action 列表，没有真正执行。
+
+**Code Quality Review**：
+- Reviewer：Anscombe
+- Agent ID：`019f5ed9-c969-79f2-9126-49e9335c1091`
+- 结果：Critical 0、Major 3、Minor 1。
+- Major：同轮 `finish` false positive；反馈修正测试过度预排；T22 mypy 在 Windows 下受既有 `file_ops.py os.O_NOFOLLOW` 类型问题阻塞。
+
+**Review fix / Refactor 内容**：
+- AgentLoop 在 `run_tests` PASS 后继续处理同轮后续 action，使 `finish` 工具真实分发执行。
+- 危险命令触发 HITL 后保持 `HITLStatus.PENDING`，以 `StopReason.HITL_DENIED` 停在人工边界，不再自动 deny 并继续。
+- 成功的可变更动作（`write_file` / `run_command`）会使既有绿色测试失效，必须重新 `run_tests`。
+- `test_mock_llm_feedback_changes_next_action` 改为条件式 fake LLM：只有看到 ASSERTION 反馈才返回修复 `write_file`。
+- 更新 `tests/unit/test_agent_loop.py` 的 HITL 期望，匹配真实 PENDING 边界。
+
+**修复后验证**：
+- `pytest tests/mock/test_agent_loop_mock.py -v` → 5 passed
+- `pytest tests/unit/test_agent_loop.py -v` → 8 passed
+- `python -m ruff check tests/mock/test_agent_loop_mock.py harness/agent_loop.py tests/unit/test_agent_loop.py` → All checks passed
+- `python -m ruff check tests/mock/test_agent_loop_mock.py` → All checks passed
+- `mypy tests/mock/test_agent_loop_mock.py` → 2 existing Windows type errors in `harness/tools/file_ops.py` (`os.O_NOFOLLOW` attr-defined)
+- `python -m py_compile harness/agent_loop.py tests/mock/test_agent_loop_mock.py` → passed
+- `git diff --check` → clean（仅 CRLF 工作区提示）
+- T22 high-confidence credential scan: `rg -n "(sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY)" harness/agent_loop.py tests/mock/test_agent_loop_mock.py tests/mock/__init__.py tests/unit/test_agent_loop.py` → 无匹配（exit 1）
+
+### 最终验证
+
+| 检查项 | 命令 | 结果 |
+|---|---|---|
+| 目标测试 | `pytest tests/mock/test_agent_loop_mock.py -v` | 5 passed |
+| 相关回归 | `pytest tests/unit/test_agent_loop.py -v` | 8 passed |
+| 完整测试套件 | `pytest -q` | 32 failed, 771 passed, 3 skipped, 1 warning |
+| Lint | `python -m ruff check tests/mock/test_agent_loop_mock.py` | All checks passed |
+| 类型检查 | `mypy tests/mock/test_agent_loop_mock.py` | 2 existing `harness/tools/file_ops.py` Windows `os.O_NOFOLLOW` attr-defined errors |
+| 凭据扫描 | 见上方 touched-file scan | 无真实凭据 |
+
+**完整测试失败说明**：
+- 失败不在 T22 修改范围内（T22 修改 `harness/agent_loop.py`、`tests/mock/*`、`tests/unit/test_agent_loop.py` 与过程文档）。
+- Windows 当前基线既有失败集中在：
+  - `harness/tools/file_ops.py` 使用 Windows 缺失的 `os.O_NOFOLLOW`；
+  - symlink 测试在 Windows 权限不足时报 `WinError 1314`；
+  - shell 测试使用 POSIX 命令 `pwd` / `sleep`；
+  - `RunTestsTool` 的 pytest JSON report 在 Windows 临时工作区场景未创建。
+
+**Commit hash**：`4491337` (`refactor(T22): complete mock integration reviews [subagent: Rawls/Anscombe; human: pending review]`)
+
+**人工干预**：
+- 用户要求继续下一个任务，并说明 T21 已检查和 push。
+- Git staging/commit 因 `.git` 写入限制需要提升权限；已用于本地 `git add` / `git commit`。
+- 未 push、未 merge、未创建 PR；人工 review 仍 pending。
+
+**教训**：
+1. 在集成测试里只把 action 放进记录不等于执行了该 action；需要断言工具 double 的调用计数或副作用。
+2. HITL 的 PENDING 是人工边界，不能用自动 deny 冒充审批流程；AgentLoop 应停在边界并让上层 UI/CLI 接管。
+3. 反馈驱动测试要让 fake LLM 对反馈条件敏感，否则只是预排脚本，不足以证明反馈改变下一步动作。
