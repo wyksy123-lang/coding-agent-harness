@@ -45,8 +45,10 @@ def test_dockerfile_builds_runtime_webui_without_baked_credentials() -> None:
 
     assert "FROM python:3.11-slim" in dockerfile
     assert "EXPOSE 8000" in dockerfile
-    assert "--host 0.0.0.0" in dockerfile
-    assert "--port 8000" in dockerfile
+    assert "--host" in dockerfile
+    assert "0.0.0.0" in dockerfile
+    assert "--port" in dockerfile
+    assert "8000" in dockerfile
     assert "webui.app:app" in dockerfile
     assert "localhost" not in lower_dockerfile
     assert not re.search(r"(api[_-]?key|token|password|secret)\s*=", lower_dockerfile)

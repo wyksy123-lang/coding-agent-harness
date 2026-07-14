@@ -1,7 +1,12 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "coding-agent-harness"
 version = "0.1.0"
 description = "TDD-focused Coding Agent Harness"
+readme = {text = "TDD-focused Coding Agent Harness.", content-type = "text/markdown"}
 requires-python = ">=3.11"
 dependencies = [
     "httpx",
@@ -16,8 +21,18 @@ dependencies = [
     "mypy",
 ]
 
+[project.scripts]
+harness = "harness.cli:main"
+
 [tool.setuptools.packages.find]
 include = ["harness*", "webui*", "demo*"]
+
+[tool.setuptools.package-data]
+webui = [
+    "static/index.html",
+    "static/app.js",
+    "static/style.css",
+]
 
 [tool.ruff]
 line-length = 100
