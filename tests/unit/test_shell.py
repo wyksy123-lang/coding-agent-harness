@@ -612,6 +612,21 @@ class TestRunTestsToolExecution:
         assert result.success is True
         assert os.path.isdir(harness_dir)
 
+    def test_runs_in_target_directory_with_spaces(self, tmp_path: Path):
+        """Windows paths with spaces should still run through argv parsing."""
+        workspace = tmp_path / "workspace with spaces"
+        workspace.mkdir()
+        _write_passing_test(str(workspace))
+        config = _shell_config()
+        tool = RunTestsTool(
+            target_directory=str(workspace),
+            test_command=config.test_command,
+            pytest_timeout=config.pytest_timeout,
+        )
+        result = tool.execute({})
+        assert result.success is True
+        assert os.path.isfile(result.output["report_path"])
+
     def test_no_test_files_returns_report_path(self, tmp_workspace):
         """Even with no test files, the report path must be returned."""
         config = _shell_config()
@@ -716,10 +731,13 @@ class TestRunTestsToolReportCreation:
 class TestRunCommandToolOSError:
     """Verify that OSError (e.g. non-existent cwd) is handled gracefully."""
 
-    def test_nonexistent_target_directory_returns_error(self):
-        """CommandGuard passes but subprocess raises FileNotFoundError."""
+    def test_nonexistent_target_directory_returns_error(self, tmp_path: Path):
+        """CommandGuard passes but the target cwd does not exist."""
+        missing_directory = tmp_path / "missing" / "directory"
+        assert not missing_directory.exists()
+
         tool = RunCommandTool(
-            target_directory="/nonexistent/dir/xyz",
+            target_directory=str(missing_directory),
             dangerous_command_patterns=[],
             timeout=5,
         )
@@ -727,16 +745,21 @@ class TestRunCommandToolOSError:
         assert isinstance(result, ToolResult)
         assert result.success is False
         assert result.error is not None
+        assert not missing_directory.exists()
 
-    def test_nonexistent_target_directory_returns_str_error(self):
+    def test_nonexistent_target_directory_returns_str_error(self, tmp_path: Path):
         """Error message should be a string, not an exception."""
+        missing_directory = tmp_path / "missing" / "directory"
+        assert not missing_directory.exists()
+
         tool = RunCommandTool(
-            target_directory="/nonexistent/dir/xyz",
+            target_directory=str(missing_directory),
             dangerous_command_patterns=[],
             timeout=5,
         )
         result = tool.execute({"cmd": "echo hello"})
         assert isinstance(result.error, str)
+        assert not missing_directory.exists()
 
 
 # ---------------------------------------------------------------------------
@@ -747,9 +770,12 @@ class TestRunCommandToolOSError:
 class TestRunTestsToolOSError:
     """Verify that OSError from non-existent target_directory is handled."""
 
-    def test_nonexistent_target_directory_returns_error(self):
+    def test_nonexistent_target_directory_returns_error(self, tmp_path: Path):
+        missing_directory = tmp_path / "missing" / "directory"
+        assert not missing_directory.exists()
+
         tool = RunTestsTool(
-            target_directory="/nonexistent/dir/xyz",
+            target_directory=str(missing_directory),
             test_command=WORKING_TEST_COMMAND,
             pytest_timeout=30,
         )
@@ -757,3 +783,4 @@ class TestRunTestsToolOSError:
         assert isinstance(result, ToolResult)
         assert result.success is False
         assert result.error is not None
+        assert not missing_directory.exists()

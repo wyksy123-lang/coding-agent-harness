@@ -31,8 +31,8 @@ def _resolve_safe_path(path: Any, target_directory: str) -> str | None:
 
 def _is_reparse_point(path: str) -> bool:
     try:
-        attrs = os.lstat(path).st_file_attributes
-    except (AttributeError, OSError):
+        attrs = int(getattr(os.lstat(path), "st_file_attributes", 0))
+    except OSError:
         return False
     return bool(attrs & stat.FILE_ATTRIBUTE_REPARSE_POINT)
 
