@@ -40,7 +40,7 @@
 | R018 | 要求1 §4.7 | PLAN.md 持续更新：每完成一个 task 即标记完成并附 commit hash | PLAN.md + git log | 审查 task 状态与 commit hash | IN PROGRESS（T01-T21 已标记 ✅ DONE + commit hash） | T01-T29 |
 | R019 | 要求1 §4.4 | SPEC_PROCESS.md：brainstorming 关键节点、≥3 轮迭代、AI 建议采纳/推翻及理由、brainstorming 反思 | SPEC_PROCESS.md | 逐项检查 | TODO | — |
 | R020 | 要求1 §4.9 | AGENT_LOG.md：时间顺序，每条含时间戳、task 编号、Superpowers 技能、关键 prompt/context、subagent 输出/commit hash、人工干预、教训 | AGENT_LOG.md | 逐条检查字段完整性 | TODO | — |
-| R021 | 要求1 §五.4 | README.md 含：项目简介、安装、运行、分发命令、目录结构、安全边界说明 | README.md | 逐节检查 | TODO | — |
+| R021 | 要求1 §五.4 | README.md 含：项目简介、安装、运行、分发命令、目录结构、安全边界说明 | README.md | 逐节检查 | DONE（T27: README includes required sections; `tests/unit/test_readme.py` and reviewer checks passed） | T27 |
 | R022 | 要求1 §五.8 | REFLECTION.md：1500–2500 字反思报告 | REFLECTION.md | 字数与内容检查 | TODO | — |
 | R023 | 要求1 §六 | REFLECTION 必须学生本人撰写，禁止 AI 代写（可 AI 辅助润色但需标注） | REFLECTION.md 内标注 | 审查 AI 辅助标注 | TODO | — |
 
@@ -52,7 +52,7 @@
 | R025 | 要求1 §3.1 | key 绝不提交进 Git（含历史） | git log 扫描 | git log -p 全历史扫描 | IN PROGRESS（T17 未新增真实 key；最终全历史扫描留待收尾） | T17 |
 | R026 | 要求1 §3.1 | key 绝不写入日志/终端 history/明文配置文件 | 代码审查 | 检查无明文 key 输出 | DONE（T17 status/log tests 验证明文 key 不出现在状态或 warning 日志） | T17 |
 | R027 | 要求1 §3.1 | 至少实现一种安全存储：OS 钥匙串/KMS/带主密码加密文件 | 源码实现 | 单测验证存储机制 | DONE（T17 CredentialManager 默认使用 OS keyring，单测用 mock backend 验证） | T17 |
-| R028 | 要求1 §3.1 | 环境变量通过 .env 加载而非命令行 export；须说明明文风险 | SPEC + README | 审查说明 | IN PROGRESS（T17 实现 .env 降级并在 SPEC 标注明文风险；README 待 T27） | T17,T27 |
+| R028 | 要求1 §3.1 | 环境变量通过 .env 加载而非命令行 export；须说明明文风险 | SPEC + README | 审查说明 | DONE（T17 implements keyring + `.env` fallback; T27 README documents plaintext `.env` risk and avoids command-line env key examples） | T17,T27 |
 | R029 | 要求1 §3.1 | 首次运行引导用户安全录入 key（隐藏输入） | 源码实现 | 单测/手动验证 | DONE（T17 setup/update 使用 getpass.getpass，单测 monkeypatch 验证路径） | T17 |
 | R030 | 要求1 §3.1 | 可查看/更新/清除 key（查看状态时不回显明文） | 源码实现 | 单测验证 | DONE（T17 覆盖 setup/status/update/clear/get_key、掩码和 stale keyring fallback） | T17 |
 | R031 | 要求1 §3.1 + §4.2 | SPEC 安全节明确凭据威胁模型与对策 | SPEC.md | 审查威胁模型节 | DONE（SPEC §4.2 已含 T1-T7 凭据威胁模型，T17 reviewer 复核） | T17 |
@@ -62,8 +62,8 @@
 | ID | 来源 | 义务 | 计划证据 | 验证方法 | 状态 | PLAN Task |
 |---|---|---|---|---|---|---|
 | R032 | 要求1 §3.2 | 选容器/二进制/包管理器一种或多种分发 | Dockerfile + PyPI 打包配置 | 检查分发产物存在 | DONE (T26: Dockerfile, PyPI wheel/sdist, console script, and WebUI static package data complete; Docker runtime verification blocked because `docker` is unavailable in current environment) | T26 |
-| R033 | 要求1 §3.2 | README 写清：获取方式、运行命令、key 在目标机安全配置、已知限制 | README.md | 逐项检查 | TODO | — |
-| R034 | 要求1 §3.4 | 凭据与分发经得起"全新机器从零运行"检验 | 安装文档 + 测试记录 | fresh-machine 测试 | IN PROGRESS (T26: built wheel installed into fresh Python 3.11 venv from outside repo; imports, `harness --help`, demo, installed WebUI HTTP 200, and `pip check` passed; install docs remain T27) | T26,T27 |
+| R033 | 要求1 §3.2 | README 写清：获取方式、运行命令、key 在目标机安全配置、已知限制 | README.md | 逐项检查 | DONE（T27 README documents package/image acquisition, run commands, `harness key` setup/status/update/clear, and known limitations without claiming publication/deployment） | T27 |
+| R034 | 要求1 §3.4 | 凭据与分发经得起"全新机器从零运行"检验 | 安装文档 + 测试记录 | fresh-machine 测试 | DONE (T26: built wheel installed into fresh Python 3.11 venv from outside repo; imports, `harness --help`, demo, installed WebUI HTTP 200, and `pip check` passed. T27: README now documents install/run/key setup and notes Docker runtime prerequisites; Docker runtime verification remained unavailable in the local T26 environment.) | T26,T27 |
 | R035 | 要求1 §4.8 | 若选容器分发，CI 须构建镜像 | CI 配置 | 审查 CI build step | TODO | — |
 | R036 | 要求1 §4.11 | 可选云部署：提供截止前可访问公网地址；README 说明部署架构与 CI/CD；控制成本 | 部署 URL + README | 访问 URL 验证 | TODO | — |
 | R037 | 要求1 §五.9 | 线上部署 URL，必须提供应用可访问的 WebUI 接口 | 部署 URL | 访问验证 | TODO | — |
@@ -111,7 +111,7 @@
 | ID | 来源 | 义务 | 计划证据 | 验证方法 | 状态 | PLAN Task |
 |---|---|---|---|---|---|---|
 | R061 | 要求1 §六 | 若有部分代码更适合自己手写（如核心算法），在该文件/函数顶部明确注释 | 源码注释 | 审查注释 | TODO | — |
-| R062 | 要求1 §六 | 使用第三方代码必须遵守其许可证，并在 README 中列出 | README | 审查许可证列表 | TODO | — |
+| R062 | 要求1 §六 | 使用第三方代码必须遵守其许可证，并在 README 中列出 | README | 审查许可证列表 | DONE（T27 README lists direct dependency licenses and warns to verify installed/transitive metadata before redistribution） | T27 |
 | R063 | 要求1 §五 | 仓库内不得出现任何真实凭据（当前文件 + Git 历史） | 全仓库扫描 | secret scan | TODO | — |
 
 ---
