@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import stat
 from typing import Any
 
 from harness.governance.path_guard import PathGuard
@@ -8,6 +9,7 @@ from harness.models import GuardResult
 from harness.tools.base import Tool, ToolResult
 
 _BOUNDARY_ERROR = "path out of bounds"
+_O_NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 
 
 def _resolve_safe_path(path: Any, target_directory: str) -> str | None:
@@ -25,6 +27,18 @@ def _resolve_safe_path(path: Any, target_directory: str) -> str | None:
     if PathGuard.check(path, target_directory) == GuardResult.DENY:
         return None
     return os.path.join(target_directory, path)
+
+
+def _is_reparse_point(path: str) -> bool:
+    try:
+        attrs = os.lstat(path).st_file_attributes
+    except (AttributeError, OSError):
+        return False
+    return bool(attrs & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+
+
+def _is_link_like(path: str) -> bool:
+    return os.path.islink(path) or _is_reparse_point(path)
 
 
 class WriteFileTool(Tool):
@@ -58,9 +72,11 @@ class WriteFileTool(Tool):
             parent = os.path.dirname(full)
             if parent:
                 os.makedirs(parent, exist_ok=True)
+            if _O_NOFOLLOW == 0 and _is_link_like(full):
+                return ToolResult(success=False, output={}, error="refusing symlink")
             fd = os.open(
                 full,
-                os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW,
+                os.O_WRONLY | os.O_CREAT | os.O_TRUNC | _O_NOFOLLOW,
             )
             try:
                 with os.fdopen(fd, "w", encoding="utf-8") as f:
@@ -104,7 +120,9 @@ class ReadFileTool(Tool):
         if not os.path.isfile(full):
             return ToolResult(success=False, output={}, error="file not found")
         try:
-            fd = os.open(full, os.O_RDONLY | os.O_NOFOLLOW)
+            if _O_NOFOLLOW == 0 and _is_link_like(full):
+                return ToolResult(success=False, output={}, error="refusing symlink")
+            fd = os.open(full, os.O_RDONLY | _O_NOFOLLOW)
             try:
                 with os.fdopen(fd, encoding="utf-8") as f:
                     content = f.read()
