@@ -5,7 +5,6 @@ from typing import Any
 
 import yaml
 
-
 WORKFLOW_PATH = Path(".github/workflows/ci.yml")
 
 
@@ -19,7 +18,7 @@ def _load_workflow() -> dict[str, Any]:
 def test_github_actions_workflow_triggers_on_push_and_main_pr() -> None:
     workflow = _load_workflow()
 
-    triggers = workflow.get("on", workflow.get(True))
+    triggers = workflow["on"]
 
     assert "push" in triggers
     assert "pull_request" in triggers
