@@ -62,6 +62,7 @@ class AgentLoop:
 
     def run(self, requirement: str) -> AgentResult:
         messages = _initial_messages(requirement)
+        has_green_tests = False
 
         for round_number in range(1, self.config.max_rounds + 1):
             response = self._chat_with_retries(messages)
@@ -91,13 +92,41 @@ class AgentLoop:
 
             for action in actions:
                 if action.tool_name == "finish":
-                    record = _round_record(
-                        round_number,
-                        actions,
-                        RoundOutcome.PASS,
-                        "",
-                        "finish",
-                    )
+                    if has_green_tests:
+                        tool_result = self._dispatch(action)
+                        if tool_result.success:
+                            record = _round_record(
+                                round_number,
+                                actions,
+                                RoundOutcome.PASS,
+                                "",
+                                "finish",
+                            )
+                        else:
+                            record = _round_record(
+                                round_number,
+                                actions,
+                                RoundOutcome.FAIL,
+                                _tool_failure_fingerprint(action, tool_result),
+                                "tool_error",
+                            )
+                            plain_feedback = _plain_feedback_message(
+                                "tool_error",
+                                f"{action.tool_name}: "
+                                f"{tool_result.error or 'tool failed'}",
+                            )
+                    else:
+                        record = _round_record(
+                            round_number,
+                            actions,
+                            RoundOutcome.FAIL,
+                            _finish_before_green_fingerprint(action),
+                            "finish_before_green",
+                        )
+                        plain_feedback = _plain_feedback_message(
+                            "finish_before_green",
+                            "Run the tests until they pass before calling finish.",
+                        )
                     break
 
                 tool_result = self._dispatch(action)
@@ -105,27 +134,29 @@ class AgentLoop:
                     request = self.hitl_state.create(
                         action, self.config.hitl_timeout_seconds
                     )
-                    denied = self.hitl_state.deny(request.request_id)
                     record = _round_record(
                         round_number,
                         actions,
                         RoundOutcome.HITL_DENIED,
-                        _hitl_failure_fingerprint(action, denied.decision),
-                        "hitl_denied",
+                        _hitl_failure_fingerprint(action, request.status.value),
+                        "hitl_pending",
                     )
                     plain_feedback = _plain_feedback_message(
-                        "hitl_denied",
-                        f"Action {action.tool_name} was denied and must be revised.",
+                        "hitl_pending",
+                        f"Action {action.tool_name} requires human approval.",
                     )
                     break
 
                 if action.tool_name == "run_tests":
                     test_result = _test_result_from_tool_result(tool_result)
+                    has_green_tests = test_result.status == "PASS"
                     record, feedback = self._record_from_test_result(
                         round_number,
                         actions,
                         test_result,
                     )
+                    if test_result.status == "PASS":
+                        continue
                     break
 
                 if not tool_result.success:
@@ -142,12 +173,11 @@ class AgentLoop:
                     )
                     break
                 self._record_output_file(action)
+                if _invalidates_green_tests(action):
+                    has_green_tests = False
 
             self.tracker.update(record)
             self._record_memory(record)
-            if record.outcome == RoundOutcome.HITL_DENIED and plain_feedback is not None:
-                messages.append(plain_feedback)
-                continue
             stop_reason = self.tracker.should_stop()
             if stop_reason is not None:
                 return self._result(stop_reason)
@@ -268,6 +298,10 @@ def _requires_approval(tool_result: ToolResult) -> bool:
     return tool_result.output.get("status") == "PENDING"
 
 
+def _invalidates_green_tests(action: Action) -> bool:
+    return action.tool_name in {"write_file", "run_command"}
+
+
 def _test_result_from_tool_result(tool_result: ToolResult) -> TestResult:
     embedded_result = tool_result.output.get("test_result")
     if isinstance(embedded_result, TestResult):
@@ -323,6 +357,10 @@ def _hitl_failure_fingerprint(action: Action, decision: str) -> str:
 
 def _llm_failure_fingerprint(response: LLMResponse) -> str:
     return f"LLM|no_tool_calls|{response.finish_reason}:{response.content}"
+
+
+def _finish_before_green_fingerprint(action: Action) -> str:
+    return f"FINISH|before_green|{action.args.get('reason', '')}"
 
 
 def _runtime_error_result(message: str) -> TestResult:

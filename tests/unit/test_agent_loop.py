@@ -196,24 +196,21 @@ def test_run_stops_when_same_failure_is_stuck(tmp_path: Path) -> None:
     assert len(result.rounds) == 2
 
 
-def test_run_stops_when_governance_requires_approval_and_hitl_denies(tmp_path: Path) -> None:
+def test_run_stops_when_governance_requires_approval_and_hitl_is_pending(
+    tmp_path: Path,
+) -> None:
     config = _config(tmp_path)
-    llm = SequencedLLM(
-        [_response("run_command", {"cmd": "rm -rf .cache"}), _response("run_tests")]
-    )
-    run_tests = SequencedRunTestsTool(tmp_path, [_pytest_report(0)])
     registry = ToolRegistry(config)
     registry.register(PendingCommandTool())
-    registry.register(run_tests)
+    llm = SequencedLLM([_response("run_command", {"cmd": "rm -rf .cache"})])
     loop = AgentLoop(config, llm, registry)
 
     result = loop.run("run a dangerous command")
 
-    assert result.status == StopReason.PASS
+    assert result.status == StopReason.HITL_DENIED
     assert result.rounds[0].actions[0].tool_name == "run_command"
     assert result.rounds[0].outcome.value == "HITL_DENIED"
-    second_prompt = "\n".join(str(message) for message in llm.messages_seen[1])
-    assert "denied" in second_prompt
+    assert result.rounds[0].strategy_used == "hitl_pending"
 
 
 def test_run_retries_llm_failures_before_dispatching_tool(tmp_path: Path) -> None:
