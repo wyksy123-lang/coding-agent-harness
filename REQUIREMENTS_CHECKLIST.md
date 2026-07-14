@@ -255,3 +255,11 @@
 | R061 | 全局 | 手写代码注释 |
 | R062 | T27 | 第三方许可证 |
 | R063 | T29 | 无凭据泄露 |
+
+# FIX-WIN-01 Windows Native Acceptance Addendum
+
+| ID | Source | Obligation | Plan Evidence | Verification Method | Status | PLAN Task |
+|---|---|---|---|---|---|---|
+| R064 | FIX-WIN-01 | Windows 11 + PowerShell + native Python is the primary supported runtime; Linux and Docker remain compatibility/deployment environments; Windows full pytest/Ruff/mypy must not retain known failed baseline. | PLAN.md FIX-WIN-01; AGENT_LOG.md LOG-048 | `python -m pytest -q`; `python -m ruff check harness webui tests`; `python -m mypy harness webui tests` | DONE (`797 passed, 5 skipped`; Ruff passed; mypy passed) | FIX-WIN-01 |
+
+---
