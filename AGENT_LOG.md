@@ -3327,3 +3327,124 @@
 1. WebSocket “可连接”不等于“实时推送”；T20 需要连接后由状态源主动广播，测试也要覆盖连接后的异步更新。
 2. WebUI 是展示边界，但 HITL action args 仍可能包含路径或凭据形态；任何展示前都应先脱敏。
 3. 状态更新 API 的省略语义要清楚区分“保持原值”和“显式清空”，否则 UI 可能丢失失败上下文。
+
+---
+
+## LOG-047 — T21 WebUI 前端
+
+**时间**：2026-07-14  
+**执行环境**：Windows Codex 当前 checkout（未创建嵌套 worktree）  
+**Worktree**：`C:\Users\裴斐\Documents\coding-agent-harness-codex`  
+**Branch**：`codex/task/T21-webui-frontend`  
+**Base main**：`ce761c4` (`Merge pull request #25 from wyksy123-lang/codex/task/T20-fastapi`)  
+**Task**：T21 — WebUI 前端
+
+**接管 / 同步记录**：
+- 用户说明 T20 已检查并 push，可继续下一任务。
+- `git status --short --branch` 显示 clean `main...origin/main`；`git log` 确认 `main` / `origin/main` 位于 T20 merge commit `ce761c4`。
+- 从最新 `main` 创建 `codex/task/T21-webui-frontend`；本轮只执行 T21，未 push、未 merge、未开始 T22。
+
+### Red 阶段
+
+**subagent 信息**：
+- 名称：Archimedes
+- Agent ID：`019f5e82-433f-7892-98e0-f5bf2bbc6c6f`
+- 任务：只读分析 T21 前端需求、T20 后端接口和最小 Red 测试。
+- 结果：建议将 `GET /` 改为返回 `webui/static/index.html`，挂载 `/static`，前端用 `/ws` 渲染状态，用 `POST /api/hitl/{request_id}` 做 approve/deny。
+
+**Red 执行内容**：
+- 扩展 `tests/unit/test_webui_app.py`。
+- 新增断言：根页面必须引用 `/static/style.css` 和 `/static/app.js`，包含状态/HITL DOM 容器；`/static/app.js` 与 `/static/style.css` 必须可访问。
+
+**Red 验证**：
+- 命令：`pytest tests/unit/test_webui_app.py -v`
+- 结果：2 failed, 14 passed, 1 warning
+- 失败原因：
+  - `GET /` 仍返回 T20 内联占位页，缺少 `href="/static/style.css"` / `src="/static/app.js"`。
+  - `/static/app.js` 返回 404。
+- 判定：失败由 T21 静态前端缺失导致，非语法、环境、依赖或测试自身错误。
+
+**Commit hash**：`3d17135` (`test(T21): add failing webui frontend tests [subagent: Archimedes; human: pending review]`)
+
+### Green 阶段
+
+**执行者**：Codex 主 agent
+
+**执行内容**：
+- 新增 `webui/static/index.html`、`webui/static/app.js`、`webui/static/style.css`。
+- `webui/app.py` 挂载 `StaticFiles`，`GET /` 返回真实 `index.html`。
+- 前端连接 `/ws`，渲染 phase/test_status/failure_type/round/strategy/stop_reason；展示 pending HITL 并提供 approve/deny 按钮。
+
+**Green 验证**：
+- `pytest tests/unit/test_webui_app.py -v` → 16 passed, 1 warning
+- `python -m ruff check webui/` → All checks passed
+
+**Commit hash**：`7bd7117` (`feat(T21): implement minimal webui frontend [subagent: Archimedes; human: pending review]`)
+
+### Refactor / Review 阶段
+
+**Specification Compliance Review**：
+- Reviewer：Hypatia
+- Agent ID：`019f5e8c-2fae-7221-a1d5-6519b8dea90c`
+- 结果：Critical 1、Major 1、Minor 1。
+- Critical：HITL `action.args` 仍可能暴露相对路径、非 `C:\Users` Windows 路径、path/cwd 字段或命令内嵌凭据，违反 WebUI 不暴露 key/path 的安全边界。
+- Major：UI 缺少 pass/fail count 与 failure details。
+
+**Code Quality Review**：
+- Reviewer：Dewey
+- Agent ID：`019f5e8c-6a91-7070-8615-c5ccb3a57c98`
+- 结果：Critical 0、Major 4、Minor 3。
+- Major：HITL approve/deny fetch 无错误处理；WebSocket JSON/状态结构解析过于乐观；公网部署前缺少 operator auth（记录为后续部署安全风险）；前端测试未执行 JS/失败路径。
+
+**追加快速审查**：
+- Pasteur (`019f5e9a-9edc-7d93-8ab7-ec7e56475b45`) / Boyle (`019f5ea1-6f86-7133-bf1e-1d8424ca948c`) 复核关键点。
+- 确认核心功能具备；提示不能把待审批命令整体脱敏到不可判断，否则 HITL 不可用。修复时采用“保留命令动词，隐藏路径/凭据片段”的折中方案。
+
+**Review fix / Refactor 内容**：
+- 后端 `WebUIState.snapshot()` 增加 `test_summary` 与 `failure_details`，前端展示 passed/failed count 和 failure details。
+- 后端 HITL 参数脱敏收紧：敏感字段名、路径字段、文件名、绝对/相对路径、`.env`、高置信 key、`api_key/token/secret/password=` 片段均脱敏；命令字段保留命令语义但替换敏感片段。
+- 前端增加二次兜底脱敏，避免未来后端遗漏时直接渲染明显 key/path。
+- 前端 WebSocket JSON parse 和 status/pending_hitl 结构增加防御；显示连接状态并在 close 后重连。
+- HITL approve/deny 提交增加 `try/catch`、`response.ok` 检查、失败提示和按钮恢复；同一 request 的两个按钮提交时一起禁用，避免双提交。
+- 测试新增 path-like HITL 参数脱敏覆盖。
+
+**修复后验证**：
+- `pytest tests/unit/test_webui_app.py -v` → 17 passed, 1 warning
+- `pytest tests/unit/test_hitl.py tests/unit/test_agent_loop.py -q` → 87 passed
+- `python -m ruff check webui/ tests/unit/test_webui_app.py` → All checks passed
+- `mypy webui/app.py` → Success: no issues found in 1 source file
+- `python -m py_compile webui/app.py webui/websocket.py` → passed
+- `git diff --check` → clean（仅 CRLF 工作区提示）
+- T21 high-confidence credential scan：`rg -n "(sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY)" webui tests\unit\test_webui_app.py` → 无匹配
+- T21 broad credential scan：`rg -n "api_key|api-key|token|secret|password|sk-|AKIA|PRIVATE KEY|C:\\Users|\.env" webui tests\unit\test_webui_app.py` → 仅脱敏规则和 fake 测试数据
+
+### 最终验证
+
+| 检查项 | 命令 | 结果 |
+|---|---|---|
+| 目标测试 | `pytest tests/unit/test_webui_app.py -v` | 17 passed, 1 warning |
+| 相关回归 | `pytest tests/unit/test_hitl.py tests/unit/test_agent_loop.py -q` | 87 passed |
+| 完整测试套件 | `pytest` | 32 failed, 766 passed, 3 skipped, 1 warning |
+| Lint | `python -m ruff check webui/ tests/unit/test_webui_app.py` | All checks passed |
+| 类型检查 | `mypy webui/app.py` | Success: no issues found in 1 source file |
+| 凭据扫描 | 见上方 touched-file scans | 无真实凭据 |
+
+**完整测试失败说明**：
+- 失败不在 T21 修改范围内（T21 修改 `webui/*` 与 `tests/unit/test_webui_app.py`）。
+- Windows 当前基线既有失败集中在：
+  - `harness/tools/file_ops.py` 使用 Windows 缺失的 `os.O_NOFOLLOW`；
+  - symlink 测试在 Windows 权限不足时报 `WinError 1314`；
+  - shell 测试使用 POSIX 命令 `pwd` / `sleep`；
+  - `RunTestsTool` 的 pytest JSON report 在 Windows 临时工作区场景未创建。
+
+**Commit hash**：`eeefe16` (`refactor(T21): complete frontend reviews and verification [subagent: Hypatia/Dewey; human: pending review]`)
+
+**人工干预**：
+- 用户要求继续下一个任务，并说明 T20 已检查和 push。
+- Git staging/commit 因 `.git` 写入限制需要提升权限；已用于本地 `git add` / `git commit`。
+- 未 push、未 merge、未创建 PR；人工 review 仍 pending。
+
+**教训**：
+1. WebUI 安全不能只靠前端克制；敏感信息必须在后端序列化边界先脱敏，前端再兜底。
+2. HITL 脱敏要平衡可用性和安全性：完全隐藏命令会让审批不可判断，正确做法是保留动作语义、隐藏路径和凭据。
+3. 对轻量 JS 前端，即便没有完整浏览器测试，也要通过静态断言和后端状态测试锁住关键 DOM、资源和安全字段。
