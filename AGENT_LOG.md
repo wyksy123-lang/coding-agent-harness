@@ -3894,3 +3894,45 @@
 **远程验证说明**：
 - Codex 本地只能验证 workflow 文件、回归测试、lint/typecheck 和 dependency check。
 - push 后仍需人工确认 GitHub Actions 上 6 个 matrix jobs：Tests/Ruff/Mypy × windows-latest/ubuntu-latest。
+
+---
+
+## LOG-053 — T24 GitHub Actions editable install fix
+
+**时间**：2026-07-14
+**执行环境**：Windows Codex 当前 checkout（未创建嵌套 worktree）
+**Worktree**：`C:\Users\裴斐\Documents\coding-agent-harness-codex`
+**Branch**：`codex/task/T24-github-actions-ci`
+**Task**：T24 — GitHub Actions CI addendum
+
+**失败来源**：
+- GitHub Actions merge/checks 中 `python -m pip install -e .` 失败。
+- Ubuntu 日志显示 setuptools 在 flat layout 中发现多个顶层包：`demo`、`webui`、`harness`。
+- 因安装失败，Windows 后续 `python -m pytest`、`python -m ruff`、`python -m mypy` 报 `No module named ...`。
+
+### Red 阶段
+
+**执行者**：Codex main agent
+**修改**：在 `tests/unit/test_github_actions_ci.py` 增加回归测试，要求 `pyproject.toml` 显式声明 setuptools package discovery includes：`harness*`、`webui*`、`demo*`。
+
+**Red 验证**：
+- `python -m pytest tests/unit/test_github_actions_ci.py -v` -> 1 failed, 4 passed。
+- 失败原因：`KeyError: 'setuptools'`，说明 `pyproject.toml` 缺少 package discovery 配置。
+
+**Commit hash**：`fa71de6` (`test(T24): cover editable CI install package discovery`)
+
+### Green 阶段
+
+**执行者**：Codex main agent
+**修改**：
+- 在 `pyproject.toml` 增加 `[tool.setuptools.packages.find] include = ["harness*", "webui*", "demo*"]`。
+
+**验证**：
+- `python -m pytest tests/unit/test_github_actions_ci.py -v` -> 5 passed
+- `python -m pip install -e . --no-deps --no-build-isolation --target tmp\ci-editable-target --no-cache-dir` -> Successfully installed `coding-agent-harness-0.1.0`
+- `python -m pip wheel . --no-deps --no-build-isolation --wheel-dir tmp\ci-wheel-check` with `PIP_NO_CACHE_DIR=1` -> Successfully built `coding-agent-harness`
+- `python -m ruff check harness/ webui/ demo/ tests/` -> All checks passed
+- `python -m mypy harness/ webui/ demo/` -> Success: no issues found in 32 source files
+- `python -m pip check` -> No broken requirements found
+
+**Commit hash**：`f803688` (`fix(T24): declare packages for CI editable install`)
