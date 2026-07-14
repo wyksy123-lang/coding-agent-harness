@@ -4106,3 +4106,103 @@
 1. Docker context hygiene must mirror credential ignore rules even when Dockerfile uses narrow `COPY`; remote builders can still receive the context.
 2. Wheel verification must include both archive content checks and fresh venv install from outside the repository to avoid accidental `sys.path` success.
 3. Docker runtime evidence must be reported separately from Dockerfile implementation when Docker is unavailable.
+
+---
+
+## LOG-056 - T27 README
+
+**Timestamp**: 2026-07-14
+**Environment**: Windows Codex checkout, fixed project venv `./.venv/Scripts/python.exe`
+**Worktree**: `C:\Users\裴斐\Documents\coding-agent-harness-codex`
+**Branch**: `codex/task/T27-readme`
+**Base main**: `1d083f9` (`Merge pull request #32 from wyksy123-lang/codex/task/T26-distribution`)
+**Task**: T27 - README
+
+**Handoff / sync**:
+- User stated T26 was completed and requested T27.
+- Confirmed current `main` and `origin/main` at `1d083f955925710a09add4e14425ecaced83e498` after `git fetch origin main`.
+- Confirmed required Python: `./.venv/Scripts/python.exe`, Python 3.11.15.
+- Created branch `codex/task/T27-readme` from latest `main`.
+- Baseline: `& $PY -m pytest tests/ -q` -> 819 passed, 5 skipped, 1 warning.
+- Scope: only T27; no Render deployment, no final acceptance, no push/merge.
+
+### Red phase
+
+**Subagent**: James (`019f6135-e167-7550-844c-d1da2d64d640`)
+**Role**: read-only T27 README preparation.
+**Result**:
+- Required README sections: project intro, install, run, distribution commands, directory structure, security boundaries, third-party licenses, known limitations.
+- Real supported commands: `harness run`, `harness key setup/status/update/clear`, `python -m build`, `docker build`, `docker run`.
+- Scope traps: do not claim Render URL, final AC1-AC25 acceptance, PyPI publish, Docker image publish, Docker local runtime verification, or env-var credential injection.
+
+**Red test**:
+- Added `tests/unit/test_readme.py` before README implementation.
+- PLAN Red command `grep -c "## " README.md` could not run under this PowerShell environment because bare `grep` was not on PATH.
+- Equivalent checks:
+  - Git grep: `/usr/bin/grep: README.md: No such file or directory`.
+  - PowerShell equivalent: `README.md: No such file or directory`.
+  - `& $PY -m pytest tests/unit/test_readme.py -v` -> 3 failed, all from `FileNotFoundError: README.md`.
+- Failure classification: expected missing README behavior, not syntax, dependency, environment, or test-design error.
+
+**Commit**: `ac90821` (`test(T27): add failing README checks [subagent: James; human: pending review]`)
+
+### Green phase
+
+**Implementation**:
+- Added `README.md`.
+- Documented overview, installation, CLI/key setup, WebUI run command, packaging/build commands, Docker build/run, directory tree, security boundaries, direct dependency license table, and known limitations.
+- README explicitly avoids claims that belong to T28/T29 or external publication steps.
+
+**Green verification**:
+- `& $PY -m pytest tests/unit/test_readme.py -v` -> 3 passed.
+- Green heading grep using Git grep matched the required section headings.
+- `& $PY -m ruff check tests/unit/test_readme.py` -> All checks passed.
+
+**Commit**: `5670930` (`docs(T27): add README installation and safety guide [subagent: James; human: pending review]`)
+
+### Refactor / Review phase
+
+**Specification Compliance Review**:
+- Reviewer: Harvey (`019f6143-825b-71f0-8c90-4d8c1a40c5cf`)
+- Result: no Critical, no Major.
+- Minor: README overclaim prevention tests could explicitly guard additional publication/runtime/credential-injection claims.
+
+**Code Quality Review**:
+- Reviewer: Socrates (`019f6143-c437-78d2-90c3-52d0294322b9`)
+- Initial result: no Critical; two Major findings.
+- Major 1: README used `python -m build` and `python -m twine check` without documenting that `build` and `twine` must be installed.
+- Major 2: README tests were too broad and did not catch that command-prerequisite gap.
+- Minor findings: Docker pull wording implied a default published image, workspace mount was PowerShell-only, and `keyring` appeared twice in test snippets.
+
+**Review fixes**:
+- Added `python -m pip install build twine` before build/twine commands.
+- Changed Docker pull example to `docker pull <registry>/coding-agent-harness`.
+- Added both Windows PowerShell and Linux/macOS Docker bind-mount examples.
+- Strengthened README tests for build/twine prerequisites, cross-platform mounts, and publication/runtime/credential-injection overclaim prevention.
+- Removed duplicate `keyring` assertion.
+- Socrates re-review: no Critical, no Major; approved.
+
+**Verification before Review commit**:
+- Target: `& $PY -m pytest tests/unit/test_readme.py -v` -> 4 passed.
+- Focused regressions: `& $PY -m pytest tests/unit/test_readme.py tests/unit/test_distribution.py tests/unit/test_cli.py -v` -> 13 passed.
+- Full suite: `& $PY -m pytest tests/ -q` -> 823 passed, 5 skipped, 1 warning.
+- Ruff: `& $PY -m ruff check harness/ webui/ demo/ tests/` -> All checks passed.
+- Mypy: `& $PY -m mypy harness/ webui/ demo/` -> Success, no issues in 32 source files; existing note about unused `tests.*` mypy override.
+- Dependency check: `& $PY -m pip check` -> No broken requirements found.
+- Credential scan: high-confidence scan found only existing explicit fake key fixture `tests/unit/test_llm_deepseek.py:15`.
+- `git diff --check` -> no whitespace errors, only expected CRLF working-copy warnings.
+
+**Commit**: `b762bed` (`refactor(T27): complete README reviews and verification [subagent: Harvey/Socrates; human: pending review]`)
+
+**Process docs**:
+- Updated `PLAN.md`, `REQUIREMENTS_CHECKLIST.md`, and this `AGENT_LOG.md`.
+- T27 completed; T28 and T29 remain TODO.
+
+**Human intervention**:
+- User required fixed Python `.\.venv\Scripts\python.exe`; all Python commands used `$PY` resolved to that path.
+- No push, no merge, no Render deploy, no final acceptance, no PyPI publish, no Docker image push.
+
+**Lessons**:
+1. README command examples need their prerequisite tooling documented, especially when tools are not project dependencies.
+2. Documentation tests should guard the accuracy risks reviewers actually identified, not only section presence.
+3. Publication/deployment wording must be explicit when artifacts are buildable locally but not yet published.
