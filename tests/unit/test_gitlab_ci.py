@@ -33,8 +33,8 @@ def test_gitlab_ci_unit_test_uses_python_image_and_pip_cache() -> None:
 def test_gitlab_ci_unit_test_installs_dependencies_and_runs_make_test() -> None:
     job = _load_gitlab_ci()["unit-test"]
 
-    before_script = "\n".join(job["before_script"])
-
-    assert "python -m pip install --upgrade pip" in before_script
-    assert "python -m pip install -e ." in before_script
+    assert job["before_script"] == [
+        "python -m pip install --upgrade pip",
+        "python -m pip install -e .",
+    ]
     assert job["script"] == ["make test"]
