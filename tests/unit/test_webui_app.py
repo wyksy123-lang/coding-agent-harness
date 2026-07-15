@@ -20,6 +20,8 @@ def test_get_root_returns_html_page() -> None:
     assert 'href="/static/style.css"' in response.text
     assert 'src="/static/app.js"' in response.text
     for element_id in [
+        "mode-value",
+        "run-status-value",
         "phase-value",
         "test-status-value",
         "passed-count-value",
@@ -30,8 +32,12 @@ def test_get_root_returns_html_page() -> None:
         "strategy-value",
         "stop-reason-value",
         "hitl-list",
+        "current-event-value",
+        "timeline-list",
     ]:
         assert f'id="{element_id}"' in response.text
+    for raw_placeholder in [">unknown<", ">none<", ">running<"]:
+        assert raw_placeholder not in response.text.lower()
 
 
 def test_static_frontend_assets_are_served() -> None:
@@ -42,10 +48,14 @@ def test_static_frontend_assets_are_served() -> None:
 
     assert app_js.status_code == 200
     assert "new WebSocket" in app_js.text
+    assert 'message.type === "snapshot"' in app_js.text
+    assert 'message.type === "event"' in app_js.text
+    assert "renderTimeline" in app_js.text
     assert "approve" in app_js.text
     assert "deny" in app_js.text
     assert style_css.status_code == 200
     assert "#hitl-list" in style_css.text
+    assert "#timeline-list" in style_css.text
 
 
 def test_get_status_returns_current_agent_status() -> None:
