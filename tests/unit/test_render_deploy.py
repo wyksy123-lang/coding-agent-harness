@@ -92,6 +92,7 @@ def test_readme_documents_verified_render_url_without_final_acceptance_claims() 
     assert "/static/app.js" in readme
     assert "secret_pattern_match=False" in readme
     assert "live deployment pending" not in readme_lower
+    assert "does not include a render service url" not in readme_lower
     assert "production deployment is live" not in readme_lower
     assert "all acceptance criteria pass" not in readme_lower
     assert "final acceptance complete" not in readme_lower

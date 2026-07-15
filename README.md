@@ -246,5 +246,5 @@ completions shape. Real LLM runs require a configured API key and network access
 Docker commands require a local Docker runtime. Container image publishing and cloud
 deployment are separate release steps.
 
-The README intentionally does not include a Render service URL or final acceptance
-results. Those belong to the later deployment and final acceptance tasks.
+The README includes T28 Render deployment evidence, but final acceptance results
+remain separate and belong to the final acceptance task.
