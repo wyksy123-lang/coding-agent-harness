@@ -4691,3 +4691,68 @@
 **Human intervention**:
 - User adjusted scope to remove public demo replay from T30 and focus on WebUI functionality.
 - No push, merge, force-push, real LLM call, real API key/token/password, Render account change, or T31 work was performed.
+
+---
+
+## LOG-060 - T31 DeepSeek protocol, error handling, and WebUI failure timeline
+
+**Timestamp**: 2026-07-15
+**Environment**: Windows Codex checkout, project venv `./.venv/Scripts/python.exe`, Python 3.11.15
+**Branch**: `codex/task/T31-deepseek-contract-webui-errors`
+**Task**: T31 - fix DeepSeek real tool-call protocol, response exceptions, and WebUI timeline
+**Status**: DONE locally; stop before push/PR
+
+**Handoff and constraints**:
+- User attached the T31 prompt and explicitly required one task only, no `REFLECTION.md` edits, no push/PR, deterministic tests before real smoke, and no credential exposure.
+- Existing untracked `harness.yaml` and `workspace/` were present before T31 work. They were not read, staged, or modified.
+- Codex recorded the OpenCode-to-Codex continuation honestly and used the existing one-task-per-run workflow.
+
+**Subagents**:
+- Prep subagent: Anscombe (`019f659b-a2f4-7772-934a-b9b3f92658eb`), read-only. Key findings: DeepSeek needed Chat Completions function-tool schema, assistant tool-call/result message preservation, response/HTTP classification, CLI nonzero model-error boundary, and zh-CN WebUI failed timeline/status semantics.
+- Specification review subagent: Linnaeus (`019f65ab-ff2f-7841-b3aa-92b2e7bd02e4`), read-only. Findings fixed before review commit: multi-tool protocol could leave unmatched tool-call IDs; AgentLoop retried provider `LLMError`; terminal non-`LLMError` exceptions could escape; tool/HITL/finish errors still added plain user feedback; `tool_completed` events were missing; leftover English frontend strings remained.
+- Code quality review subagent: Laplace (`019f65ac-3002-75c3-8211-4a45404cbb79`), read-only. Findings fixed before review commit: safe messages/events could leak token/path-like strings; broad `httpx.RequestError` subclasses bypassed structured handling; duplicate retry ownership remained.
+
+**Red evidence**:
+- Commit `6cd429d`: `test(T31): add failing DeepSeek and WebUI contract tests [subagent: Anscombe; human: pending review]`
+- Red command: `& $PY -m pytest tests/unit/test_tool_registry.py tests/unit/test_llm_deepseek.py tests/unit/test_agent_loop.py tests/unit/test_run_events.py tests/unit/test_webui_state.py tests/unit/test_webui_app.py tests/unit/test_cli.py -q`
+- Result: 29 failed, 152 passed, 1 warning. Failures were missing `get_llm_schemas`, missing LLM error types, missing assistant/tool result protocol, missing `MODEL_ERROR`/`LLM_ERROR`, incomplete DeepSeek response handling, and English/placeholder WebUI behavior.
+
+**Green evidence**:
+- Commit `6d942b8`: `feat(T31): implement DeepSeek protocol and WebUI error handling [subagent: Anscombe; human: pending review]`
+- Implemented `ToolRegistry.get_llm_schemas()`, `ToolCall.raw_tool_call`, `LLMError` subclasses, DeepSeek response/HTTP classification, assistant `tool_calls` plus `role=tool` messages, `StopReason.LLM_ERROR`, `model_requested`/`model_error`, CLI nonzero failed-run exit, WebUI failed snapshots, and zh-CN timeline rendering.
+- Focused green suite: `& $PY -m pytest tests/unit/test_tool_registry.py tests/unit/test_llm_deepseek.py tests/unit/test_agent_loop.py tests/unit/test_run_events.py tests/unit/test_webui_state.py tests/unit/test_webui_app.py tests/unit/test_cli.py -q` -> 181 passed, 1 warning.
+- Mock regressions: `& $PY -m pytest tests/mock/test_agent_loop_mock.py tests/mock/test_mechanism_demo.py -q` -> 9 passed.
+
+**Refactor/review evidence**:
+- Commit `793553c`: `refactor(T31): complete protocol error reviews and verification [subagent: Linnaeus/Laplace; human: pending review]`
+- Added regression tests for one tool result per assistant tool call, skipped structured tool results, no plain user tool-error feedback, `TOOL_COMPLETED`, terminal provider `LLMError` ownership, unknown exception conversion, 408/422/502/503/504/error matrix coverage, and redaction of fake key/path/bearer patterns.
+- Updated AgentLoop so every assistant `tool_call_id` receives one structured result before the next model request, including skipped/HITL/error paths.
+- Updated DeepSeek to catch all `httpx.RequestError` subclasses and sanitize error messages.
+- Updated RunEvent serialization and snapshot failure details to redact high-confidence secrets, bearer content, `.env`, and path-like strings.
+- Localized remaining visible WebUI timeline/HITL fallbacks.
+- Target suite after review: `& $PY -m pytest tests/unit/test_tool_registry.py tests/unit/test_llm_deepseek.py tests/unit/test_agent_loop.py tests/unit/test_run_events.py tests/unit/test_webui_state.py tests/unit/test_webui_app.py tests/unit/test_cli.py tests/unit/test_models.py -q` -> 242 passed, 1 warning.
+- Full tests after review: `& $PY -m pytest tests/ -q` -> 884 passed, 5 skipped, 1 warning.
+- Ruff: `& $PY -m ruff check harness/ webui/ demo/ tests/` -> All checks passed.
+- Mypy: `& $PY -m mypy harness/ webui/ demo/` -> Success, no issues in 36 source files; existing unused `tests.*` override note.
+
+**Packaging, demo, and credential evidence**:
+- `& $PY -m demo.run_demo` -> governance_interception `HITL_DENIED`, feedback_correction `PASS`, stuck_detection `STUCK`.
+- `& $PY -m pip install -e .` first failed in sandbox because PyPI/build dependency access was blocked; approved rerun succeeded and installed `coding-agent-harness==0.1.0`.
+- `& $PY -m pip check` -> No broken requirements found.
+- `& $PY -m build` first failed in sandbox while installing isolated build requirements; approved rerun built `coding_agent_harness-0.1.0.tar.gz` and `coding_agent_harness-0.1.0-py3-none-any.whl`.
+- `& $PY -m twine check dist\*` first hit a permission error reading the elevated build artifacts; approved rerun passed for both wheel and sdist.
+- `git diff --check` -> no whitespace errors.
+- Current-tree high-confidence credential scan excluding `harness.yaml`, `workspace/`, `dist/`, `build/`, and egg-info found only explicit fake key fixture/log strings (`sk-fake-test-key-not-real`), no real credentials.
+- Full-history high-confidence scan with `git log -G` matched only commits known to contain fake fixture/log references; no real credential was identified.
+- Controlled real DeepSeek smoke was skipped because `& $PY -m harness.cli key status` returned `not configured`. No real API key was read, printed, stored, or used.
+
+**Documentation evidence**:
+- Updated `PLAN.md` T31 with implementation points, commit hashes, review findings, command evidence, and the skipped smoke reason.
+- Updated `README.md` with the DeepSeek function-tool protocol, `role=tool` result requirement, `LLM_ERROR` behavior, WebUI timeline/error-display semantics, and real-smoke key gate.
+- Updated `REQUIREMENTS_CHECKLIST.md` with R066 for T31.
+- Added internal plan/evidence file `docs/superpowers/plans/2026-07-15-deepseek-contract-webui-errors.md`.
+
+**Human intervention and safety**:
+- User started T31 from an attached prompt and did not request push/merge/PR.
+- Network approvals were used only for pip editable install/build dependency fetching and package artifact checks after sandbox failures.
+- No push, merge, force-push, remote branch modification, real LLM call, real API key/token/password readout, or `REFLECTION.md` edit was performed.

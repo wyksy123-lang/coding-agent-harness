@@ -271,3 +271,11 @@
 | R065 | T30 user adjustment | WebUI local review path must attach to the real same-process AgentLoop, stream live state/timeline, and support recoverable HITL decisions without requiring a public demo service. | PLAN.md T30; README.md local `--web` section; AGENT_LOG.md LOG-059 | `harness run "..." --web`; targeted WebUI/AgentLoop/CLI tests; final pytest/Ruff/Mypy/pip check/credential scan | DONE (`852 passed, 5 skipped`; Ruff passed; Mypy passed; pip check passed; credential scans found no real credentials); public demo replay marked out of scope by user on 2026-07-15 | T30 |
 
 ---
+
+# T31 DeepSeek Tool Protocol And Error Timeline Addendum
+
+| ID | Source | Obligation | Plan Evidence | Verification Method | Status | PLAN Task |
+|---|---|---|---|---|---|---|
+| R066 | T31 user prompt | Real DeepSeek tool calling must use the Chat Completions function-tool schema, every assistant tool call must receive a matching `role=tool` result, provider/malformed-response failures must become safe `LLM_ERROR` outcomes, and the local WebUI must show failed-run timeline/status details without leaking credentials or paths. | PLAN.md T31; README.md DeepSeek protocol/error note; AGENT_LOG.md LOG-060 | Red/Green/Review commits; targeted DeepSeek/AgentLoop/WebUI/CLI tests; full pytest/Ruff/Mypy/pip check; build/twine/demo; credential scan; controlled real smoke gate | DONE (`884 passed, 5 skipped`; target suite `242 passed`; Ruff/Mypy/pip/build/twine/demo passed; current-tree scan only found fake fixture/log strings; real DeepSeek smoke skipped because key status was `not configured`) | T31 |
+
+---
