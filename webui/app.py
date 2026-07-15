@@ -34,6 +34,11 @@ def create_app(state: WebUIState | None = None, *, mode: str = "demo") -> FastAP
 
     @app.post("/api/hitl/{request_id}")
     async def decide_hitl(request_id: str, request: Request) -> dict[str, str]:
+        if webui_state.mode == "demo":
+            raise HTTPException(
+                status_code=403,
+                detail="HITL mutations are disabled in public demo mode",
+            )
         try:
             payload = await request.json()
         except json.JSONDecodeError as exc:

@@ -5,6 +5,7 @@ import threading
 from dataclasses import dataclass
 from typing import Any
 
+from harness.approval import ApprovalBroker
 from harness.governance.hitl import HITLState
 from harness.models import Action, HITLRequest
 from harness.run_events import RunEvent, apply_event_to_snapshot, sanitize_event_metadata
@@ -21,6 +22,10 @@ class WebUIState:
         self.mode = mode
         self.run_id = run_id
         self.hitl_state = HITLState()
+        self.approval_broker = ApprovalBroker(
+            self.hitl_state,
+            on_change=self._broadcast_snapshot,
+        )
         self._lock = threading.RLock()
         self._snapshot = apply_event_to_snapshot(None, None)
         self._timeline: list[dict[str, Any]] = []
@@ -122,20 +127,13 @@ class WebUIState:
                 self._subscriptions.remove(subscription)
 
     def create_hitl_request(self, action: Action, timeout: int) -> HITLRequest:
-        request = self.hitl_state.create(action, timeout)
-        self._broadcast_snapshot()
-        return request
+        return self.approval_broker.create_pending(action, timeout)
+
+    def request_approval(self, action: Action, timeout: int) -> HITLRequest:
+        return self.approval_broker.request(action, timeout)
 
     def decide_hitl(self, request_id: str, decision: str) -> HITLRequest:
-        normalized = decision.lower()
-        if normalized in {"approve", "approved"}:
-            request = self.hitl_state.approve(request_id)
-        elif normalized in {"deny", "denied"}:
-            request = self.hitl_state.deny(request_id)
-        else:
-            raise ValueError("decision must be approve or deny")
-        self._broadcast_snapshot()
-        return request
+        return self.approval_broker.resolve(request_id, decision)
 
     def _broadcast_snapshot(self) -> None:
         with self._lock:
