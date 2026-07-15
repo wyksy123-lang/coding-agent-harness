@@ -65,8 +65,8 @@
 | R033 | 要求1 §3.2 | README 写清：获取方式、运行命令、key 在目标机安全配置、已知限制 | README.md | 逐项检查 | DONE（T27 README documents package/image acquisition, run commands, `harness key` setup/status/update/clear, and known limitations without claiming publication/deployment） | T27 |
 | R034 | 要求1 §3.4 | 凭据与分发经得起"全新机器从零运行"检验 | 安装文档 + 测试记录 | fresh-machine 测试 | DONE (T26: built wheel installed into fresh Python 3.11 venv from outside repo; imports, `harness --help`, demo, installed WebUI HTTP 200, and `pip check` passed. T27: README now documents install/run/key setup and notes Docker runtime prerequisites; Docker runtime verification remained unavailable in the local T26 environment.) | T26,T27 |
 | R035 | 要求1 §4.8 | 若选容器分发，CI 须构建镜像 | CI 配置 | 审查 CI build step | TODO | — |
-| R036 | 要求1 §4.11 | 可选云部署：提供截止前可访问公网地址；README 说明部署架构与 CI/CD；控制成本 | 部署 URL + README | 访问 URL 验证 | TODO | — |
-| R037 | 要求1 §五.9 | 线上部署 URL，必须提供应用可访问的 WebUI 接口 | 部署 URL | 访问验证 | TODO | — |
+| R036 | 要求1 §4.11 | 可选云部署：提供截止前可访问公网地址；README 说明部署架构与 CI/CD；控制成本 | 部署 URL + README | 访问 URL 验证 | DONE（T28 live Render deployment verified：`https://coding-agent-harness-zq0k.onrender.com/` 在 2026-07-15T03:05:17Z 和 2026-07-15T03:15:02Z 返回 HTTP 200；`render.yaml` 定义 Render free Docker Web Service；README 记录部署架构、CI/CD、免费层休眠和公网 URL；未写入真实 API key/token/password） | T28 |
+| R037 | 要求1 §五.9 | 线上部署 URL，必须提供应用可访问的 WebUI 接口 | 部署 URL | 访问验证 | DONE（T28 live WebUI verified：`GET /` 返回 200 且包含 `Coding Agent Harness`、`HITL`、`/static/style.css`、`/static/app.js`；`GET /static/style.css` 和 `GET /static/app.js` 均返回 200；credential pattern scan negative for checked bodies） | T28 |
 
 ## E. Harness 内核（要求2 专属）
 

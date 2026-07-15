@@ -135,6 +135,37 @@ docker run -p 8000:8000 -v $(pwd)/workspace:/app/workspace coding-agent-harness
 
 Docker must be installed and available on `PATH` for the Docker commands.
 
+## Render deployment
+
+`render.yaml` defines a Render Docker Web Service that builds from the repository
+root with `./Dockerfile`. The service uses the free plan, checks `/` as its health
+check path, and starts deployment only after repository checks pass.
+
+The container runs Uvicorn on `0.0.0.0` and reads Render's `PORT` environment
+variable with a local fallback to `8000`. The `/` health check is the WebUI index
+route served by FastAPI.
+
+Set `DEEPSEEK_API_KEY` in Render as a secret environment variable. The blueprint
+marks it with `sync: false`; no real API key, token, or password is stored in this
+repository or baked into the image. Render prompts for `sync: false` values during
+initial Blueprint creation; for later syncs or existing services, keep the secret
+configured manually in Render.
+
+CI/CD flow: push a task branch, wait for GitHub Actions checks to pass, merge to
+`main`, then let Render deploy the checked revision from the Dockerfile. Free Render
+services may sleep when idle and need a browser refresh or request to wake.
+
+Live deployment verified:
+
+- URL: https://coding-agent-harness-zq0k.onrender.com/
+- checked_at_utc=2026-07-15T03:05:17Z
+- GET / -> 200, `text/html`, length 1647
+- GET /static/style.css -> 200, `text/css`, length 1453
+- GET /static/app.js -> 200, `application/javascript`, length 6538
+- The root page contained `Coding Agent Harness`, `HITL`, `/static/style.css`, and
+  `/static/app.js`.
+- secret_pattern_match=False for the checked response bodies.
+
 ## 目录结构
 
 ```text
@@ -215,5 +246,5 @@ completions shape. Real LLM runs require a configured API key and network access
 Docker commands require a local Docker runtime. Container image publishing and cloud
 deployment are separate release steps.
 
-The README intentionally does not include a Render service URL or final acceptance
-results. Those belong to the later deployment and final acceptance tasks.
+The README includes T28 Render deployment evidence, but final acceptance results
+remain separate and belong to the final acceptance task.
