@@ -4756,3 +4756,40 @@
 - User started T31 from an attached prompt and did not request push/merge/PR.
 - Network approvals were used only for pip editable install/build dependency fetching and package artifact checks after sandbox failures.
 - No push, merge, force-push, remote branch modification, real LLM call, real API key/token/password readout, or `REFLECTION.md` edit was performed.
+
+**Production-path continuation on 2026-07-15**:
+- User requested continued T31 work on the same branch, no new task, no push, no PR, no `REFLECTION.md`, and specifically asked to trace the production schema wiring path.
+- Root-cause trace commands:
+  - `rg -n "get_schemas\(" harness tests`
+  - `rg -n "get_llm_schemas\(" harness tests`
+  - `rg -n "\.chat\(" harness tests`
+- Findings before the fix:
+  - `AgentLoop._chat_with_retries()` preferred `get_llm_schemas()` but still fell back to `self.tool_registry.get_schemas()` when a registry-like object lacked `get_llm_schemas`.
+  - No other production path was found sending raw schemas directly, but the fallback meant production could still silently send raw parameter schemas.
+  - Existing tests proved the serializer output (`registry.get_llm_schemas()`), but did not prove the complete `AgentLoop -> ToolRegistry.get_llm_schemas() -> DeepSeekClient.chat() -> HTTP request.content` path.
+  - `DeepSeekClient.chat()` trusted the caller's `tools` list and did not reject raw parameter schemas before sending HTTP.
+- Red commit `ce0e115`: `test(T31): expose production tool schema wiring gap [human review pending]`.
+  - Added `test_agent_loop_sends_chat_completion_function_tools_to_llm`.
+  - Added `test_agent_loop_to_deepseek_http_body_contains_function_tool_schemas`.
+  - Added `test_deepseek_rejects_raw_parameter_schemas_before_http`.
+  - Red command: `& $PY -m pytest tests/unit/test_tool_registry.py tests/unit/test_llm_deepseek.py tests/unit/test_agent_loop.py -q` -> 1 failed, 157 passed. Expected failure: raw parameter schemas did not raise `LLMRequestError` and reached the HTTP client.
+- Green commit `402a74b`: `fix(T31): enforce function tool schemas in production path [human review pending]`.
+  - Removed the AgentLoop fallback to `get_schemas()`.
+  - Added `get_llm_schemas()` to the CLI registry protocol boundary.
+  - Marked `ToolRegistry.get_schemas()` as raw legacy/internal schemas not suitable for Chat Completions APIs.
+  - Added DeepSeek preflight validation for `type="function"`, non-empty `function.name`, non-empty `function.description`, object `function.parameters`, and `parameters.type == "object"`.
+  - Invalid raw schemas now raise `LLMRequestError(kind="invalid_tool_schema", retryable=False, provider="deepseek")` before HTTP; the MockTransport handler call count remains 0.
+- Production-path verification:
+  - `& $PY -m pytest tests/unit/test_tool_registry.py tests/unit/test_llm_deepseek.py tests/unit/test_agent_loop.py -q` -> 158 passed.
+  - `rg -n "get_schemas\(" harness` -> only `harness/tools/base.py` legacy method definition and `harness/cli.py` protocol declaration; no AgentLoop/CLI/LLM/WebUI production call site.
+  - `rg -n "get_llm_schemas\(" harness tests` -> `harness/agent_loop.py` production call plus serializer/protocol/tests.
+  - Manual MockTransport check with real `build_tool_registry()`, real `DeepSeekClient`, and captured `request.content` printed `Actual HTTP tool contract: PASS`.
+  - Captured HTTP body tools were six unique function tools: `write_file`, `read_file`, `list_files`, `run_command`, `run_tests`, `finish`; each had non-empty description and object parameters; JSON body did not include Authorization or the fake API key.
+- Full verification after continuation:
+  - `& $PY -m pytest tests/ -q` -> 888 passed, 5 skipped, 1 warning.
+  - `& $PY -m ruff check harness/ webui/ demo/ tests/` -> All checks passed.
+  - `& $PY -m mypy harness/ webui/ demo/` -> Success, no issues in 36 source files; existing unused `tests.*` override note.
+  - `& $PY -m pip check` -> No broken requirements found.
+  - `git diff --check` -> no whitespace errors.
+  - `& $PY -m harness.cli key status` -> `not configured`; real DeepSeek smoke skipped, no real key read or printed.
+- Generated `.harness/memory.json` from verification was removed after confirming the `.harness` path was inside the repo. Pre-existing untracked `harness.yaml` and `workspace/` were left untouched.

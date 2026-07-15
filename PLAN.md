@@ -1063,14 +1063,18 @@ T29 (final acceptance) ← depends on all
    - Red: `6cd429d` (`test(T31): add failing DeepSeek and WebUI contract tests [subagent: Anscombe; human: pending review]`)
    - Green: `6d942b8` (`feat(T31): implement DeepSeek protocol and WebUI error handling [subagent: Anscombe; human: pending review]`)
    - Refactor/Review: `793553c` (`refactor(T31): complete protocol error reviews and verification [subagent: Linnaeus/Laplace; human: pending review]`)
-   - Docs: pending this evidence commit
+   - Docs: `150b656` (`docs(T31): record task completion evidence [human review pending]`)
+   - Production-path Red: `ce0e115` (`test(T31): expose production tool schema wiring gap [human review pending]`)
+   - Production-path Green: `402a74b` (`fix(T31): enforce function tool schemas in production path [human review pending]`)
+   - Production-path Docs: pending this evidence commit
 6. **Review evidence**:
    - Specification review subagent Linnaeus (`019f65ab-ff2f-7841-b3aa-92b2e7bd02e4`) found one Critical and several Major issues around multi-tool result balance, duplicate retry ownership, unknown exception boundaries, plain user feedback for tool errors, missing `tool_completed`, and leftover English frontend strings; all were fixed before the review commit.
    - Code quality review subagent Laplace (`019f65ac-3002-75c3-8211-4a45404cbb79`) found Critical sanitizer risk plus Major broad `httpx.RequestError` and duplicate retry issues; all Critical/Major findings were fixed before the review commit.
 7. **Final verification**:
    - Target suite: `& $PY -m pytest tests/unit/test_tool_registry.py tests/unit/test_llm_deepseek.py tests/unit/test_agent_loop.py tests/unit/test_run_events.py tests/unit/test_webui_state.py tests/unit/test_webui_app.py tests/unit/test_cli.py tests/unit/test_models.py -q` -> 242 passed, 1 warning.
    - Mock regressions: `& $PY -m pytest tests/mock/test_agent_loop_mock.py tests/mock/test_mechanism_demo.py -q` -> 9 passed.
-   - Full suite: `& $PY -m pytest tests/ -q` -> 884 passed, 5 skipped, 1 warning.
+   - Production path target suite: `& $PY -m pytest tests/unit/test_tool_registry.py tests/unit/test_llm_deepseek.py tests/unit/test_agent_loop.py -q` -> 158 passed.
+   - Full suite after production-path fix: `& $PY -m pytest tests/ -q` -> 888 passed, 5 skipped, 1 warning.
    - Ruff: `& $PY -m ruff check harness/ webui/ demo/ tests/` -> All checks passed.
    - Mypy: `& $PY -m mypy harness/ webui/ demo/` -> Success, no issues in 36 source files; existing unused `tests.*` override note.
    - Editable install: first sandbox run failed on blocked PyPI access; rerun with approved network access passed and installed `coding-agent-harness==0.1.0`.
@@ -1079,6 +1083,8 @@ T29 (final acceptance) ← depends on all
    - `& $PY -m twine check dist\*` -> first sandbox read failed with permission error on elevated artifacts; approved rerun passed for wheel and sdist.
    - `& $PY -m pip check` -> No broken requirements found.
    - `git diff --check` -> no whitespace errors.
+   - Production path search: `rg -n "get_schemas\(" harness` -> only `harness/tools/base.py` legacy method definition and `harness/cli.py` protocol declaration; no AgentLoop/LLM/WebUI production call site.
+   - Manual MockTransport contract check -> `Actual HTTP tool contract: PASS`; captured final DeepSeek request body contained six function tools (`write_file`, `read_file`, `list_files`, `run_command`, `run_tests`, `finish`) and no Authorization/API key in JSON body.
    - Credential scans: current tree found only explicit fake key fixture/log references; full-history `git log -G` matched only commits known to contain the fake fixture/log references.
    - Controlled real DeepSeek smoke: skipped because `& $PY -m harness.cli key status` returned `not configured`; no real key was read, printed, or used.
 8. **Status**: DONE locally; stop before push/PR.

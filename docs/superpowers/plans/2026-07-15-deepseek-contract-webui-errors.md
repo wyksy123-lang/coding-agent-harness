@@ -142,7 +142,10 @@
 - Red: `6cd429d`
 - Green: `6d942b8`
 - Refactor/Review: `793553c`
-- Docs/evidence: pending
+- Docs/evidence: `150b656`
+- Production-path Red: `ce0e115`
+- Production-path Green: `402a74b`
+- Production-path docs/evidence: pending
 
 **Subagents:**
 - Prep: Anscombe (`019f659b-a2f4-7772-934a-b9b3f92658eb`)
@@ -153,7 +156,8 @@
 - Red target suite: 29 failed, 152 passed, 1 warning.
 - Green target suite: 181 passed, 1 warning.
 - Review target suite including `test_models`: 242 passed, 1 warning.
-- Full tests: 884 passed, 5 skipped, 1 warning.
+- Production-path target suite after continuation: 158 passed.
+- Full tests after continuation: 888 passed, 5 skipped, 1 warning.
 - Mock regressions: 9 passed.
 - Ruff full check: passed.
 - Mypy full source check: passed, with the existing unused `tests.*` override note.
@@ -163,5 +167,7 @@
 - `python -m build`: sandbox run blocked by isolated build dependency install; approved rerun built sdist and wheel.
 - `twine check dist\*`: sandbox read of elevated artifacts failed with permission error; approved rerun passed.
 - `git diff --check`: passed.
+- `rg -n "get_schemas\(" harness`: only the legacy method definition and CLI protocol declaration remain; no AgentLoop/LLM/WebUI production call.
+- Manual MockTransport contract check: `Actual HTTP tool contract: PASS`.
 - Credential scans: only explicit fake fixture/log strings were found.
 - Controlled real DeepSeek smoke: skipped because `harness key status` returned `not configured`; no real key was read or used.
