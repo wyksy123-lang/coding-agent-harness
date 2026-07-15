@@ -4493,3 +4493,103 @@
 - User asked to continue after T28; no T30 or unrelated task was started.
 - User's fixed Python requirement remained active; all Python commands used `$PY`.
 - No push, merge, force-push, real credentials, GitHub PAT, Render token, or NJU/GitLab credential was requested.
+
+### Final continuation after student reflection
+
+**Timestamp**: 2026-07-15
+**Human update**:
+- User stated `REFLECTION.md` has been completed.
+- User stated R061 should be `N/A`.
+- User confirmed no code is declared as independently student-handwritten; Codex must not fabricate authorship comments. Complied.
+
+**Scope guard**:
+- Continued only T29 final acceptance.
+- Did not start T30 or any new feature.
+- Did not call a real LLM and did not request, print, store, or commit any API key/token/password.
+
+**Python environment confirmation**:
+- Command:
+  - `$PY = (Resolve-Path ".\.venv\Scripts\python.exe").Path`
+  - `& $PY -c "import sys; print(sys.executable); print(sys.version)"`
+- Result: fixed project venv interpreter under `.venv\Scripts\python.exe`, Python `3.11.15`.
+
+**Code/config updates in this continuation**:
+- Limited Python support metadata to the actually verified runtime: `requires-python = ">=3.11,<3.12"`.
+- Added repeatable cross-platform fresh-install smoke script `tests/smoke/fresh_install_smoke.py`.
+- Extended `.github/workflows/ci.yml`:
+  - Docker job now builds with `load: true`, does not publish (`push: false`), starts the image, and curls `/`, `/static/style.css`, and `/static/app.js`.
+  - Package job builds distributions, runs `twine check`, and uploads distribution artifacts.
+- Extended README source-install and wheel-install documentation, including the real Render URL and the distinction between mock/demo smoke checks with no API key vs real `harness run` requiring a user-provided DeepSeek key via `harness key setup`.
+
+**Target verification before final docs**:
+- `& $PY -m pytest tests/unit/test_github_actions_ci.py tests/unit/test_distribution.py tests/unit/test_readme.py -v` -> 15 passed.
+- `& $PY -m ruff check tests/unit/test_github_actions_ci.py tests/unit/test_distribution.py tests/unit/test_readme.py tests/smoke/fresh_install_smoke.py` -> All checks passed.
+- `& $PY -m mypy tests/smoke/fresh_install_smoke.py` -> Success, no issues found in 1 source file.
+
+**Full local verification**:
+- `& $PY -m pip install -e .` -> success after approved network access for build dependency installation.
+- `& $PY -m pip check` -> No broken requirements found.
+- `& $PY -m pytest tests/ -q` -> 829 passed, 5 skipped, 1 warning.
+- `& $PY -m ruff check harness/ webui/ demo/ tests/` -> All checks passed.
+- `& $PY -m mypy harness/ webui/ demo/` -> Success, no issues in 32 source files; existing unused `tests.*` override note.
+- `& $PY -m demo.run_demo` -> `governance_interception: HITL_DENIED`; `feedback_correction: PASS`; `stuck_detection: STUCK`.
+
+**Packaging evidence**:
+- `& $PY -m build` with approved network/build access completed and created `coding_agent_harness-0.1.0.tar.gz` and `coding_agent_harness-0.1.0-py3-none-any.whl`.
+- Windows permission note: the elevated build produced `dist/*` artifacts that the normal sandbox process could not read (`PermissionError: [Errno 13] Permission denied`), so `& $PY -m twine check dist/*` was blocked by local Windows file ACL state rather than package metadata.
+- Supplemental readable wheel evidence:
+  - Built a readable wheel into `%TEMP%\coding-agent-harness-t29-pip-wheel` using `& $PY -m pip wheel --no-build-isolation --no-deps . -w <temp>`.
+  - `& $PY -m twine check <temp wheel>` -> PASSED.
+
+**Fresh install evidence**:
+- Command: `& $PY -m tests.smoke.fresh_install_smoke --wheel <temp wheel>`.
+- First sandbox run failed because fresh venv dependency install needed PyPI access for `httpx`; this was an expected sandbox network limitation.
+- Re-ran with approved network access.
+- Result:
+  - fresh repo-outside venv installed the wheel non-editably.
+  - imports for `harness`, `webui`, and `demo` passed.
+  - `harness --help` passed.
+  - `python -m demo.run_demo` passed.
+  - fresh venv `pip check` passed.
+  - installed WebUI started on `127.0.0.1:8765`.
+  - `GET /` -> 200, length 1708.
+  - `GET /static/style.css` -> 200, length 1568.
+  - `GET /static/app.js` -> 200, length 6716.
+
+**Reflection metadata-only check**:
+- `REFLECTION.md` exists.
+- Metadata-only counts: 8725 chars, 7589 non-whitespace chars, 4765 CJK chars.
+- AI-assistance/disclosure marker regex matched.
+- Codex did not print, summarize, rewrite, or otherwise modify the reflection body.
+
+**Live Render recheck**:
+- URL: `https://coding-agent-harness-zq0k.onrender.com/`.
+- First recheck at `2026-07-15T08:37:01Z`:
+  - root `/` timed out at 30 seconds.
+  - `/static/style.css` -> 200, `text/css; charset=utf-8`, length 1453, no credential-pattern match.
+  - `/static/app.js` -> 200, `application/javascript`, length 6538, no credential-pattern match.
+- Root-only retry at `2026-07-15T08:38:10Z`:
+  - `/` -> 200, `text/html; charset=utf-8`, length 1647.
+  - root contained `Coding Agent Harness`.
+  - no credential-pattern match.
+
+**Credential scans**:
+- Current tree high-confidence scan:
+  - Command: `rg -n "(sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|ghp_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,})" .`
+  - Result: only existing explicit fake key fixture/log references (`sk-fake-test-key-not-real`), no real credentials.
+- Full Git history high-confidence scan:
+  - Command: `git log --all -p | rg -n "(sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|ghp_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,})"`
+  - Result: only existing explicit fake key fixture/log references, no real credentials.
+- Readable wheel artifact scan:
+  - Result: `artifact_secret_match=False`.
+
+**Remaining external deferred items**:
+- R035/R059: latest pushed GitHub Actions pass for the new T29 `docker-build` and `package` jobs requires human push/PR.
+- R059: GitLab `unit-test` pass remains unavailable without NJU/GitLab URL/evidence.
+- R060: DEFERRED - NJU Git submission URL has not been provided.
+- R061: N/A per user confirmation; no fake authorship comments added.
+
+**Lessons**:
+1. On Windows, build artifacts produced in an elevated context can become unreadable to the normal sandbox; record that as environment evidence rather than pretending `dist/*` passed locally.
+2. Fresh-install validation needs real dependency resolution unless a dependency wheelhouse is supplied; sandbox network failures should be separated from package correctness.
+3. Final acceptance should distinguish product readiness from human-owned submission evidence such as NJU URLs, PR creation, and latest remote CI runs.
