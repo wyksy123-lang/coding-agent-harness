@@ -9,15 +9,16 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from harness.models import HITLRequest
-from webui.websocket import WebSocketStatusEndpoint, WebUIState
+from webui.state import WebUIState
+from webui.websocket import WebSocketStatusEndpoint
 
 _STATIC_DIR = Path(__file__).with_name("static")
 
 __all__ = ["WebUIState", "app", "create_app"]
 
 
-def create_app(state: WebUIState | None = None) -> FastAPI:
-    webui_state = state or WebUIState()
+def create_app(state: WebUIState | None = None, *, mode: str = "demo") -> FastAPI:
+    webui_state = state or WebUIState(mode=mode)
     app = FastAPI(title="Coding Agent Harness")
     app.state.webui_state = webui_state
     app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")

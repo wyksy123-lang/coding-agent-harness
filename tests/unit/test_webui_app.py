@@ -65,17 +65,17 @@ def test_get_status_returns_current_agent_status() -> None:
     response = client.get("/api/status")
 
     assert response.status_code == 200
-    assert response.json() == {
-        "phase": "green",
-        "round_number": 2,
-        "test_status": "PASS",
-        "test_summary": {"passed": 3, "failed": 0},
-        "failure_type": None,
-        "failure_details": [],
-        "strategy": "tests_passed",
-        "stop_reason": "PASS",
-        "pending_hitl": [],
-    }
+    payload = response.json()
+    assert payload["phase"] == "green"
+    assert payload["status"] == "Completed"
+    assert payload["round_number"] == 2
+    assert payload["test_status"] == "PASS"
+    assert payload["test_summary"] == {"passed": 3, "failed": 0}
+    assert payload["failure_type"] is None
+    assert payload["failure_details"] == []
+    assert payload["strategy"] == "tests_passed"
+    assert payload["stop_reason"] == "PASS"
+    assert payload["pending_hitl"] == []
 
 
 def test_websocket_sends_current_status_on_connect() -> None:
@@ -86,10 +86,10 @@ def test_websocket_sends_current_status_on_connect() -> None:
     with client.websocket_connect("/ws") as websocket:
         message = websocket.receive_json()
 
-    assert message["type"] == "status"
-    assert message["status"]["phase"] == "red"
-    assert message["status"]["round_number"] == 1
-    assert message["status"]["test_status"] == "FAIL"
+    assert message["type"] == "snapshot"
+    assert message["snapshot"]["phase"] == "red"
+    assert message["snapshot"]["round_number"] == 1
+    assert message["snapshot"]["test_status"] == "FAIL"
 
 
 def test_websocket_pushes_status_updates_after_connect() -> None:
@@ -106,10 +106,10 @@ def test_websocket_pushes_status_updates_after_connect() -> None:
     finally:
         executor.shutdown(wait=False, cancel_futures=True)
 
-    assert message["type"] == "status"
-    assert message["status"]["phase"] == "green"
-    assert message["status"]["round_number"] == 2
-    assert message["status"]["test_status"] == "PASS"
+    assert message["type"] == "snapshot"
+    assert message["snapshot"]["phase"] == "green"
+    assert message["snapshot"]["round_number"] == 2
+    assert message["snapshot"]["test_status"] == "PASS"
 
 
 def test_websocket_replies_to_ping() -> None:
@@ -282,8 +282,8 @@ def test_websocket_pushes_hitl_pending_updates_after_connect() -> None:
     finally:
         executor.shutdown(wait=False, cancel_futures=True)
 
-    assert message["type"] == "status"
-    assert len(message["status"]["pending_hitl"]) == 1
+    assert message["type"] == "snapshot"
+    assert len(message["snapshot"]["pending_hitl"]) == 1
 
 
 def test_hitl_approval_endpoint_rejects_invalid_json_body() -> None:

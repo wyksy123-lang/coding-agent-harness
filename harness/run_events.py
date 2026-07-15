@@ -55,6 +55,9 @@ _SENSITIVE_CONTENT_RE = re.compile(
 )
 _WINDOWS_USER_PATH_RE = re.compile(r"C:\\Users\\\S+", re.IGNORECASE)
 _ENV_FILE_RE = re.compile(r"\S*\.env\S*", re.IGNORECASE)
+_PATH_LIKE_RE = re.compile(
+    r"([A-Za-z]:\\\S+|\\\\\S+|/\S+|\S*[\\/]\S+|[\w.-]+\.[A-Za-z0-9]{1,8})"
+)
 
 
 @dataclass(frozen=True)
@@ -174,5 +177,5 @@ def _sanitize_string(value: str) -> str:
     )
     redacted = _WINDOWS_USER_PATH_RE.sub("[redacted]", redacted)
     redacted = _ENV_FILE_RE.sub("[redacted]", redacted)
+    redacted = _PATH_LIKE_RE.sub("[redacted]", redacted)
     return redacted
-
