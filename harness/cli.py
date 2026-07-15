@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from importlib import import_module
 from pathlib import Path
 from typing import Any, Protocol, cast
@@ -11,6 +11,11 @@ from typing import Any, Protocol, cast
 from harness.config.loader import ConfigError, ConfigLoader
 from harness.credentials.manager import CredentialManager
 from harness.models import Config
+
+_DEEPSEEK_MODEL_ALIASES = {
+    "flash": "deepseek-v4-flash",
+    "pro": "deepseek-v4-pro",
+}
 
 
 class CredentialManagerProtocol(Protocol):
@@ -170,6 +175,12 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("requirement")
     run_parser.add_argument("--config", default="harness.yaml")
     run_parser.add_argument("--web", action="store_true")
+    run_parser.add_argument(
+        "--model",
+        choices=tuple(_DEEPSEEK_MODEL_ALIASES),
+        default=None,
+        help="Override the DeepSeek model for this run: flash or pro.",
+    )
 
     key_parser = subparsers.add_parser("key")
     key_subparsers = key_parser.add_subparsers(dest="key_command", required=True)
@@ -213,6 +224,9 @@ def _handle_run(args: argparse.Namespace, dependencies: CLIDependencies) -> int:
     except ConfigError as exc:
         print(f"Config error: {exc}", file=sys.stderr)
         return 2
+    model_alias = cast(str | None, getattr(args, "model", None))
+    if model_alias is not None:
+        config = replace(config, model=_DEEPSEEK_MODEL_ALIASES[model_alias])
 
     requirement = cast(str, args.requirement)
     if bool(getattr(args, "web", False)):
@@ -225,6 +239,7 @@ def _handle_run(args: argparse.Namespace, dependencies: CLIDependencies) -> int:
     else:
         result = dependencies.make_agent_loop(config, api_key).run(requirement)
     print(f"status: {_status_value(result.status)}")
+    print(f"model: {config.model}")
     if result.output_files:
         print("output_files:")
         for output_file in result.output_files:
