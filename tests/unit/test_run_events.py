@@ -144,7 +144,9 @@ def test_model_error_event_sets_failed_snapshot_with_safe_failure_details() -> N
             summary="DeepSeek rejected the request with HTTP 400: invalid tool schema",
             metadata={
                 "failure_type": "LLM_API_ERROR",
-                "failure_details": "DeepSeek rejected the request with HTTP 400: invalid tool schema",
+                "failure_details": (
+                    "DeepSeek rejected the request with HTTP 400: invalid tool schema"
+                ),
             },
         ),
     )

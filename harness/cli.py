@@ -227,7 +227,7 @@ def _handle_run(args: argparse.Namespace, dependencies: CLIDependencies) -> int:
         print("output_files:")
         for output_file in result.output_files:
             print(f"- {output_file}")
-    return 0
+    return 0 if _status_value(result.status) == "PASS" else 1
 
 
 def _status_value(status: object) -> str:

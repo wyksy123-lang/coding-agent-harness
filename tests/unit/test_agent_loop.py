@@ -287,6 +287,7 @@ def test_run_publishes_lifecycle_events_for_passing_test_round(tmp_path: Path) -
     assert [event.event_type for event in events] == [
         RunEventType.TASK_STARTED,
         RunEventType.ROUND_STARTED,
+        RunEventType.MODEL_REQUESTED,
         RunEventType.MODEL_RESPONSE,
         RunEventType.TOOL_REQUESTED,
         RunEventType.TESTS_STARTED,

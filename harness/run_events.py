@@ -10,7 +10,9 @@ from typing import Any
 class RunEventType(StrEnum):
     TASK_STARTED = "task_started"
     ROUND_STARTED = "round_started"
+    MODEL_REQUESTED = "model_requested"
     MODEL_RESPONSE = "model_response"
+    MODEL_ERROR = "model_error"
     TOOL_REQUESTED = "tool_requested"
     TOOL_COMPLETED = "tool_completed"
     TESTS_STARTED = "tests_started"
@@ -122,6 +124,18 @@ def apply_event_to_snapshot(
         current["hitl_decision"] = event.hitl_decision.value
     if event.stop_reason is not None:
         current["stop_reason"] = event.stop_reason
+    if event.event_type == RunEventType.MODEL_ERROR:
+        current["test_status"] = TestStatus.NOT_STARTED.value
+        current["failure_type"] = str(
+            event.metadata.get("failure_type", "LLM_API_ERROR")
+        )
+        details = event.metadata.get("failure_details", event.summary)
+        current["failure_details"] = [{"message": str(details)}]
+    if event.event_type == RunEventType.TESTS_STARTED:
+        current["test_status"] = TestStatus.RUNNING.value
+    if event.event_type == RunEventType.TESTS_COMPLETED:
+        if event.test_status is not None:
+            current["test_status"] = event.test_status.value
     current["status"] = _status_for_phase(str(current["phase"]))
     return current
 
@@ -131,7 +145,9 @@ def _initial_snapshot() -> dict[str, Any]:
         "phase": RunPhase.IDLE.value,
         "status": "Not started",
         "round_index": 0,
-        "test_status": None,
+        "test_status": TestStatus.NOT_STARTED.value,
+        "failure_type": None,
+        "failure_details": [],
         "hitl_request_id": None,
         "hitl_decision": None,
         "stop_reason": None,

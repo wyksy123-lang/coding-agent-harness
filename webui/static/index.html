@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -10,63 +10,63 @@
   <main id="app">
     <section class="status-panel" aria-labelledby="status-heading">
       <h1 id="status-heading">Coding Agent Harness</h1>
-      <p id="connection-status">Connecting</p>
+      <p id="connection-status">连接中</p>
       <dl class="status-grid">
         <div>
-          <dt>Mode</dt>
-          <dd id="mode-value">Not available</dd>
+          <dt>运行模式</dt>
+          <dd id="mode-value">—</dd>
         </div>
         <div>
-          <dt>Status</dt>
-          <dd id="run-status-value">Not available</dd>
+          <dt>任务状态</dt>
+          <dd id="run-status-value">—</dd>
         </div>
         <div>
-          <dt>Phase</dt>
-          <dd id="phase-value">Not available</dd>
+          <dt>当前阶段</dt>
+          <dd id="phase-value">—</dd>
         </div>
         <div>
-          <dt>Tests</dt>
-          <dd id="test-status-value">Not available</dd>
+          <dt>测试状态</dt>
+          <dd id="test-status-value">未开始</dd>
         </div>
         <div>
-          <dt>Passed</dt>
-          <dd id="passed-count-value">0</dd>
+          <dt>测试通过</dt>
+          <dd id="passed-count-value">—</dd>
         </div>
         <div>
-          <dt>Failed</dt>
-          <dd id="failed-count-value">0</dd>
+          <dt>测试失败</dt>
+          <dd id="failed-count-value">—</dd>
+        </div>
+        <div id="failure-type-card" hidden>
+          <dt>失败类型</dt>
+          <dd id="failure-type-value">—</dd>
+        </div>
+        <div id="failure-details-card" hidden>
+          <dt>失败详情</dt>
+          <dd id="failure-details-value">—</dd>
         </div>
         <div>
-          <dt>Failure</dt>
-          <dd id="failure-type-value">Not available</dd>
-        </div>
-        <div>
-          <dt>Details</dt>
-          <dd id="failure-details-value">Not available</dd>
-        </div>
-        <div>
-          <dt>Round</dt>
+          <dt>当前轮次</dt>
           <dd id="round-number-value">0</dd>
         </div>
         <div>
-          <dt>Strategy</dt>
-          <dd id="strategy-value">Not available</dd>
+          <dt>当前策略</dt>
+          <dd id="strategy-value">—</dd>
         </div>
         <div>
-          <dt>Stop</dt>
-          <dd id="stop-reason-value">Not available</dd>
+          <dt>停止原因</dt>
+          <dd id="stop-reason-value">—</dd>
         </div>
       </dl>
     </section>
 
     <section class="timeline-panel" aria-labelledby="timeline-heading">
-      <h2 id="timeline-heading">Run timeline</h2>
-      <p id="current-event-value">Not available</p>
+      <h2 id="timeline-heading">运行时间线</h2>
+      <p id="current-event-value">—</p>
       <ol id="timeline-list" aria-live="polite"></ol>
     </section>
 
     <section class="hitl-panel" aria-labelledby="hitl-heading">
-      <h2 id="hitl-heading">HITL approvals</h2>
+      <h2 id="hitl-heading">人工审批</h2>
       <div id="hitl-list" aria-live="polite"></div>
     </section>
   </main>

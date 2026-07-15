@@ -35,6 +35,11 @@ class Tool(ABC):
         """Return the name of the tool."""
 
     @property
+    def description(self) -> str:
+        """Return a short human-readable tool description."""
+        return self.name
+
+    @property
     @abstractmethod
     def schema(self) -> dict[str, Any]:
         """Return the JSON schema describing the tool's arguments."""
@@ -125,3 +130,35 @@ class ToolRegistry:
             A list of JSON schema dictionaries.
         """
         return [tool.schema for tool in self._tools.values()]
+
+    def get_llm_schemas(self) -> list[dict[str, Any]]:
+        """Return enabled tools in Chat Completions function-tool format."""
+        return [
+            tool_to_chat_completion_schema(tool)
+            for tool in self._tools.values()
+            if self.is_enabled(tool.name)
+        ]
+
+
+def tool_to_chat_completion_schema(tool: Tool) -> dict[str, Any]:
+    """Serialize a Tool as an OpenAI/DeepSeek Chat Completions function tool."""
+    name = tool.name
+    if not name:
+        raise ValueError("tool name must be non-empty")
+    parameters = {
+        key: value
+        for key, value in tool.schema.items()
+        if key not in {"name", "description"}
+    }
+    if parameters.get("type") != "object":
+        raise ValueError(f"tool '{name}' parameters must be an object schema")
+    raw_description = getattr(tool, "description", name)
+    description = str(raw_description).strip() or name
+    return {
+        "type": "function",
+        "function": {
+            "name": name,
+            "description": description,
+            "parameters": parameters,
+        },
+    }

@@ -27,6 +27,7 @@ class StopReason(Enum):
     MAX_ROUNDS = "MAX_ROUNDS"
     STUCK = "STUCK"
     HITL_DENIED = "HITL_DENIED"
+    LLM_ERROR = "LLM_ERROR"
 
 
 class HITLStatus(Enum):

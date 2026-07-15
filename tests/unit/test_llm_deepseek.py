@@ -9,8 +9,8 @@ import httpx
 import pytest
 from httpx import MockTransport
 
-from harness.llm.base import LLMClient, LLMResponse, ToolCall
 import harness.llm.base as llm_base
+from harness.llm.base import LLMClient, LLMResponse, ToolCall
 from harness.llm.deepseek import DeepSeekClient
 
 FAKE_API_KEY = "sk-fake-test-key-not-real"

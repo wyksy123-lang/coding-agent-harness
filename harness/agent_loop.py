@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, cast
@@ -12,7 +13,14 @@ from harness.feedback import (
     TestResultParser,
 )
 from harness.governance.hitl import HITLState
-from harness.llm.base import LLMClient, LLMResponse, ToolCall
+from harness.llm.base import (
+    LLMClient,
+    LLMError,
+    LLMRequestError,
+    LLMResponse,
+    LLMResponseError,
+    ToolCall,
+)
 from harness.memory.retriever import MemoryRecorder, MemoryRetriever
 from harness.models import (
     Action,
@@ -96,7 +104,16 @@ class AgentLoop:
                 phase=RunPhase.RUNNING,
                 summary=f"Round {round_number} started",
             )
-            response = self._chat_with_retries(messages)
+            self._emit(
+                RunEventType.MODEL_REQUESTED,
+                round_index=round_number,
+                phase=RunPhase.RUNNING,
+                summary="Requesting model",
+            )
+            try:
+                response = self._chat_with_retries(messages)
+            except LLMError as exc:
+                return self._llm_error_result(exc)
             self._emit(
                 RunEventType.MODEL_RESPONSE,
                 round_index=round_number,
@@ -104,6 +121,7 @@ class AgentLoop:
                 summary=response.finish_reason,
             )
             actions = [_action_from_tool_call(call) for call in response.tool_calls]
+            messages.append(_assistant_message(response))
             if not actions:
                 record = _round_record(
                     round_number,
@@ -138,6 +156,7 @@ class AgentLoop:
                 if action.tool_name == "finish":
                     if has_green_tests:
                         tool_result = self._dispatch(action)
+                        messages.append(_tool_result_message(action, tool_result))
                         if tool_result.success:
                             record = _round_record(
                                 round_number,
@@ -160,6 +179,16 @@ class AgentLoop:
                                 f"{tool_result.error or 'tool failed'}",
                             )
                     else:
+                        messages.append(
+                            _tool_result_message(
+                                action,
+                                ToolResult(
+                                    success=False,
+                                    output={},
+                                    error="tests must pass before finish",
+                                ),
+                            )
+                        )
                         record = _round_record(
                             round_number,
                             actions,
@@ -184,6 +213,7 @@ class AgentLoop:
                 tool_result = self._dispatch(action)
                 if _requires_approval(tool_result):
                     if self.approval_broker is None:
+                        messages.append(_tool_result_message(action, tool_result))
                         request = self.hitl_state.create(
                             action, self.config.hitl_timeout_seconds
                         )
@@ -208,6 +238,9 @@ class AgentLoop:
                     if request.status == HITLStatus.APPROVED:
                         tool_result = self._dispatch(action, approved=True)
                     else:
+                        messages.append(
+                            _tool_result_message(action, _hitl_tool_result(request))
+                        )
                         strategy = _hitl_strategy(request)
                         record = _round_record(
                             round_number,
@@ -222,6 +255,7 @@ class AgentLoop:
                         )
                         break
 
+                messages.append(_tool_result_message(action, tool_result))
                 if action.tool_name == "run_tests":
                     test_result = _test_result_from_tool_result(tool_result)
                     self._emit(
@@ -276,7 +310,17 @@ class AgentLoop:
         last_exception: Exception | None = None
         for _ in range(attempts):
             try:
-                return self.llm_client.chat(messages, self.tool_registry.get_schemas())
+                get_llm_schemas = getattr(self.tool_registry, "get_llm_schemas", None)
+                tools = (
+                    get_llm_schemas()
+                    if callable(get_llm_schemas)
+                    else self.tool_registry.get_schemas()
+                )
+                return self.llm_client.chat(messages, tools)
+            except LLMError as exc:
+                last_exception = exc
+                if not exc.retryable:
+                    raise
             except Exception as exc:
                 last_exception = exc
         if last_exception is None:
@@ -351,6 +395,23 @@ class AgentLoop:
             output_files=list(self.output_files),
         )
 
+    def _llm_error_result(self, error: LLMError) -> AgentResult:
+        failure_type = _llm_failure_type(error)
+        self._emit(
+            RunEventType.MODEL_ERROR,
+            phase=RunPhase.FAILED,
+            stop_reason=StopReason.LLM_ERROR.value,
+            summary=error.safe_message,
+            metadata={
+                "failure_type": failure_type,
+                "failure_details": error.safe_message,
+                "status_code": error.status_code,
+                "retryable": error.retryable,
+                "provider": error.provider,
+            },
+        )
+        return self._result(StopReason.LLM_ERROR)
+
     def _record_memory(self, record: RoundRecord) -> None:
         self.memory_recorder.record(record)
 
@@ -366,6 +427,7 @@ class AgentLoop:
         hitl_request_id: str | None = None,
         hitl_decision: HITLDecision | None = None,
         stop_reason: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         if self.event_sink is None:
             return
@@ -383,6 +445,7 @@ class AgentLoop:
                 hitl_request_id=hitl_request_id,
                 hitl_decision=hitl_decision,
                 stop_reason=stop_reason,
+                metadata=metadata or {},
             )
         )
 
@@ -439,12 +502,69 @@ def _plain_feedback_message(kind: str, details: str) -> dict[str, Any]:
     }
 
 
+def _assistant_message(response: LLMResponse) -> dict[str, Any]:
+    message: dict[str, Any] = {
+        "role": "assistant",
+        "content": response.content,
+    }
+    if response.tool_calls:
+        message["tool_calls"] = [_raw_tool_call(call) for call in response.tool_calls]
+    return message
+
+
+def _raw_tool_call(tool_call: ToolCall) -> dict[str, Any]:
+    if isinstance(tool_call.raw_tool_call, dict):
+        return tool_call.raw_tool_call
+    return {
+        "id": tool_call.id,
+        "type": "function",
+        "function": {
+            "name": tool_call.name,
+            "arguments": json.dumps(tool_call.arguments, sort_keys=True),
+        },
+    }
+
+
+def _tool_result_message(action: Action, result: ToolResult) -> dict[str, Any]:
+    tool_call = action.raw_tool_call
+    tool_call_id = tool_call.id if isinstance(tool_call, ToolCall) else ""
+    return {
+        "role": "tool",
+        "tool_call_id": tool_call_id,
+        "content": json.dumps(
+            {
+                "success": result.success,
+                "output": result.output,
+                "error": result.error,
+            },
+            default=str,
+            sort_keys=True,
+        ),
+    }
+
+
+def _hitl_tool_result(request: HITLRequest) -> ToolResult:
+    return ToolResult(
+        success=False,
+        output={"status": request.status.value, "decision": request.decision},
+        error=f"HITL {request.status.value.lower()}",
+    )
+
+
 def _action_from_tool_call(tool_call: ToolCall) -> Action:
     return Action(
         tool_name=tool_call.name,
         args=dict(tool_call.arguments),
         raw_tool_call=tool_call,
     )
+
+
+def _llm_failure_type(error: LLMError) -> str:
+    if isinstance(error, LLMResponseError):
+        return "LLM_RESPONSE_ERROR"
+    if isinstance(error, LLMRequestError):
+        return "LLM_API_ERROR"
+    return "LLM_API_ERROR"
 
 
 def _requires_approval(tool_result: ToolResult) -> bool:
