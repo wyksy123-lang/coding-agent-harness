@@ -983,7 +983,7 @@ T29 (final acceptance) ← depends on all
 11. **对应 worktree 和 PR 范围**: `feature/readme-deploy` / PR13
 12. **完成状态及 commit hash 记录位置**: 本文件 T29 行；AGENT_LOG.md；REQUIREMENTS_CHECKLIST.md
 
-**状态**: ⬜ TODO | **Commit**: —
+**Status**: BLOCKED - local acceptance checks passed and R035 CI Docker build config gap fixed; final external/student evidence pending | **Commit**: 048fa29 (Red), 1a862b6 (Green), ff7f3a7 (Review)
 
 ---
 
