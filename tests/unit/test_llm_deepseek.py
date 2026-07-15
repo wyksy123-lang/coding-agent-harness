@@ -10,8 +10,11 @@ import pytest
 from httpx import MockTransport
 
 import harness.llm.base as llm_base
+from harness.agent_loop import AgentLoop
+from harness.cli import build_tool_registry
 from harness.llm.base import LLMClient, LLMResponse, ToolCall
 from harness.llm.deepseek import DeepSeekClient
+from harness.models import Config
 
 FAKE_API_KEY = "sk-fake-test-key-not-real"
 
@@ -216,7 +219,16 @@ class TestDeepSeekClientRequestConstruction:
             return httpx.Response(200, json=_make_api_response())
 
         messages = [{"role": "user", "content": "hi"}]
-        tools = [{"type": "function", "function": {"name": "write_file"}}]
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "write_file",
+                    "description": "Write a file",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            }
+        ]
         client = _make_client(
             transport=MockTransport(handler),
             model="deepseek-chat",
@@ -905,6 +917,98 @@ class TestDeepSeekClientNonRetriableErrors:
         result = client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
 
         assert result.finish_reason == "content_filter"
+
+
+class TestDeepSeekClientToolSchemaContract:
+    def test_deepseek_rejects_raw_parameter_schemas_before_http(self):
+        call_count = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            return httpx.Response(200, json=_make_api_response())
+
+        transport = MockTransport(handler)
+        client = _make_client(transport=transport, retry_count=3)
+
+        with pytest.raises(llm_base.LLMRequestError) as exc_info:
+            client.chat(
+                messages=[{"role": "user", "content": "hi"}],
+                tools=[{"type": "object", "properties": {}, "required": []}],
+            )
+
+        assert call_count == 0
+        assert exc_info.value.kind == "invalid_tool_schema"
+        assert exc_info.value.retryable is False
+        assert FAKE_API_KEY not in exc_info.value.safe_message
+
+    def test_deepseek_sends_standard_function_tool_schemas(self, tmp_path: Path):
+        captured_payloads: list[dict[str, Any]] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured_payloads.append(json.loads(request.content))
+            return httpx.Response(200, json=_make_api_response())
+
+        registry = build_tool_registry(Config(target_directory=str(tmp_path)))
+        transport = MockTransport(handler)
+        client = _make_client(transport=transport, retry_count=3)
+
+        result = client.chat(
+            messages=[{"role": "user", "content": "hi"}],
+            tools=registry.get_llm_schemas(),
+        )
+
+        assert result.content == "Hello!"
+        assert len(captured_payloads) == 1
+        tools = captured_payloads[0]["tools"]
+        assert {tool["type"] for tool in tools} == {"function"}
+        assert {tool["function"]["name"] for tool in tools} == {
+            "write_file",
+            "read_file",
+            "list_files",
+            "run_command",
+            "run_tests",
+            "finish",
+        }
+        assert all(tool["function"]["description"] for tool in tools)
+        assert all(tool["function"]["parameters"]["type"] == "object" for tool in tools)
+
+    def test_agent_loop_to_deepseek_http_body_contains_function_tool_schemas(
+        self,
+        tmp_path: Path,
+    ):
+        captured_payloads: list[dict[str, Any]] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured_payloads.append(json.loads(request.content))
+            return httpx.Response(200, json=_make_api_response(content="", finish_reason="stop"))
+
+        config = Config(target_directory=str(tmp_path), max_rounds=1, llm_retry_count=0)
+        registry = build_tool_registry(config)
+        client = _make_client(transport=MockTransport(handler), retry_count=0)
+        loop = AgentLoop(config, client, registry)
+
+        loop.run("capture production HTTP body")
+
+        assert len(captured_payloads) == 1
+        payload = captured_payloads[0]
+        rendered_body = json.dumps(payload)
+        assert FAKE_API_KEY not in rendered_body
+        assert "Authorization" not in rendered_body
+        tools = payload["tools"]
+        assert len(tools) == 6
+        assert [tool["function"]["name"] for tool in tools] == [
+            "write_file",
+            "read_file",
+            "list_files",
+            "run_command",
+            "run_tests",
+            "finish",
+        ]
+        assert len({tool["function"]["name"] for tool in tools}) == 6
+        assert all(tool["type"] == "function" for tool in tools)
+        assert all(tool["function"]["description"] for tool in tools)
+        assert all(tool["function"]["parameters"]["type"] == "object" for tool in tools)
 
 
 class TestDeepSeekClientResourceCleanup:

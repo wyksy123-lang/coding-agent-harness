@@ -31,6 +31,48 @@ class SequencedLLM(LLMClient):
         return item
 
 
+class CapturingLLM(LLMClient):
+    def __init__(self, response: LLMResponse) -> None:
+        self.response = response
+        self.tools_seen: list[list[dict[str, Any]]] = []
+
+    def chat(
+        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
+    ) -> LLMResponse:
+        self.tools_seen.append(tools)
+        return self.response
+
+
+class SpyRegistry:
+    def __init__(self) -> None:
+        self.get_schemas_called = 0
+        self.get_llm_schemas_called = 0
+
+    def get_schemas(self) -> list[dict[str, Any]]:
+        self.get_schemas_called += 1
+        return [{"type": "object", "properties": {}, "required": []}]
+
+    def get_llm_schemas(self) -> list[dict[str, Any]]:
+        self.get_llm_schemas_called += 1
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "finish",
+                    "description": "Finish the task.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "required": [],
+                    },
+                },
+            }
+        ]
+
+    def dispatch(self, action: Any) -> ToolResult:
+        return ToolResult(success=True, output={})
+
+
 class SequencedRunTestsTool(Tool):
     def __init__(self, tmp_path: Path, reports: list[dict[str, Any]]) -> None:
         self._tmp_path = tmp_path
@@ -328,6 +370,22 @@ def test_run_preserves_assistant_tool_calls_and_tool_results_for_next_request(
     assert second_messages[-1]["tool_call_id"] == "call-write_file"
     tool_payload = json.loads(second_messages[-1]["content"])
     assert tool_payload["success"] is True
+
+
+def test_agent_loop_sends_chat_completion_function_tools_to_llm(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path, max_rounds=1)
+    llm = CapturingLLM(_no_tool_response())
+    registry = SpyRegistry()
+    loop = AgentLoop(config, llm, registry)  # type: ignore[arg-type]
+
+    loop.run("capture model tools")
+
+    assert registry.get_llm_schemas_called >= 1
+    assert registry.get_schemas_called == 0
+    assert llm.tools_seen[0][0]["type"] == "function"
+    assert llm.tools_seen[0][0]["function"]["name"] == "finish"
 
 
 def test_llm_api_error_emits_model_error_and_single_finished_event(
