@@ -10,15 +10,23 @@
   <main id="app">
     <section class="status-panel" aria-labelledby="status-heading">
       <h1 id="status-heading">Coding Agent Harness</h1>
-      <p id="connection-status">connecting</p>
+      <p id="connection-status">Connecting</p>
       <dl class="status-grid">
         <div>
+          <dt>Mode</dt>
+          <dd id="mode-value">Not available</dd>
+        </div>
+        <div>
+          <dt>Status</dt>
+          <dd id="run-status-value">Not available</dd>
+        </div>
+        <div>
           <dt>Phase</dt>
-          <dd id="phase-value">idle</dd>
+          <dd id="phase-value">Not available</dd>
         </div>
         <div>
           <dt>Tests</dt>
-          <dd id="test-status-value">unknown</dd>
+          <dd id="test-status-value">Not available</dd>
         </div>
         <div>
           <dt>Passed</dt>
@@ -30,11 +38,11 @@
         </div>
         <div>
           <dt>Failure</dt>
-          <dd id="failure-type-value">none</dd>
+          <dd id="failure-type-value">Not available</dd>
         </div>
         <div>
           <dt>Details</dt>
-          <dd id="failure-details-value">none</dd>
+          <dd id="failure-details-value">Not available</dd>
         </div>
         <div>
           <dt>Round</dt>
@@ -42,13 +50,19 @@
         </div>
         <div>
           <dt>Strategy</dt>
-          <dd id="strategy-value">none</dd>
+          <dd id="strategy-value">Not available</dd>
         </div>
         <div>
           <dt>Stop</dt>
-          <dd id="stop-reason-value">running</dd>
+          <dd id="stop-reason-value">Not available</dd>
         </div>
       </dl>
+    </section>
+
+    <section class="timeline-panel" aria-labelledby="timeline-heading">
+      <h2 id="timeline-heading">Run timeline</h2>
+      <p id="current-event-value">Not available</p>
+      <ol id="timeline-list" aria-live="polite"></ol>
     </section>
 
     <section class="hitl-panel" aria-labelledby="hitl-heading">
