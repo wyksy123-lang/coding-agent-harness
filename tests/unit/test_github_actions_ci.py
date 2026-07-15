@@ -65,8 +65,51 @@ def test_github_actions_workflow_builds_docker_image_without_publishing() -> Non
     build_config = build_steps[0]["with"]
     assert build_config["context"] == "."
     assert build_config["file"] == "./Dockerfile"
+    assert build_config["load"] is True
     assert build_config["push"] is False
     assert build_config["tags"] == "coding-agent-harness:ci"
+
+    docker_commands = "\n".join(
+        str(step["run"]) for step in docker_job["steps"] if "run" in step
+    )
+    assert "docker run --rm -d --name coding-agent-harness-ci -p 8000:8000" in docker_commands
+    assert "curl --fail --retry 10 --retry-delay 2 http://127.0.0.1:8000/" in docker_commands
+    assert (
+        "curl --fail --retry 10 --retry-delay 2 "
+        "http://127.0.0.1:8000/static/style.css"
+    ) in docker_commands
+    assert (
+        "curl --fail --retry 10 --retry-delay 2 "
+        "http://127.0.0.1:8000/static/app.js"
+    ) in docker_commands
+    assert "docker stop coding-agent-harness-ci" in docker_commands
+
+
+def test_github_actions_workflow_builds_and_uploads_python_distributions() -> None:
+    workflow = _load_workflow()
+
+    package_job = workflow["jobs"]["package"]
+
+    assert package_job["name"] == "Build package artifacts"
+    assert package_job["runs-on"] == "ubuntu-latest"
+    assert any(step.get("uses") == "actions/checkout@v4" for step in package_job["steps"])
+    assert any(
+        step.get("uses") == "actions/setup-python@v5"
+        and step.get("with", {}).get("python-version") == "3.11"
+        for step in package_job["steps"]
+    )
+    package_commands = "\n".join(
+        str(step["run"]) for step in package_job["steps"] if "run" in step
+    )
+    assert "python -m pip install build twine" in package_commands
+    assert "python -m build" in package_commands
+    assert "python -m twine check dist/*" in package_commands
+    upload_steps = [
+        step for step in package_job["steps"] if step.get("uses") == "actions/upload-artifact@v4"
+    ]
+    assert len(upload_steps) == 1
+    assert upload_steps[0]["with"]["name"] == "python-distributions"
+    assert upload_steps[0]["with"]["path"] == "dist/*"
 
 
 def test_github_actions_workflow_runs_project_ci_commands() -> None:
@@ -105,7 +148,6 @@ def test_github_actions_workflow_uses_portable_runner_commands() -> None:
         "python - <<",
         "/bin/sh",
         "bash",
-        "rm ",
         "cp ",
         "touch ",
         "C:\\Users\\",
