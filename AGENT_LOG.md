@@ -4217,7 +4217,7 @@
 **Branch**: `codex/task/T28-render-deploy`
 **Base main**: `b066ae9` (`Merge pull request #33 from wyksy123-lang/codex/task/T27-readme`)
 **Task**: T28 - Render deployment
-**Status**: implementation complete, live deployment pending
+**Status**: DONE - live Render deployment verified
 
 **Handoff / sync**:
 - User stated T27 was checked and pushed, then narrowed T28 scope to code/config only with live Render deployment pending.
@@ -4300,7 +4300,7 @@
 | Dependency check | `& $PY -m pip check` | No broken requirements found |
 | Credential scan | `rg -n "(sk-[A-Za-z0-9_-]{20,}\|AKIA[0-9A-Z]{16}\|BEGIN (RSA \|EC \|OPENSSH )?PRIVATE KEY\|ghp_[A-Za-z0-9_]{20,}\|xox[baprs]-[A-Za-z0-9-]{10,})" .` | Only existing explicit fake key fixture/log references |
 | Diff check | `git diff --check` | no whitespace errors |
-| Live Render URL | `curl -s -o /dev/null -w "%{http_code}" <URL>` | Not run; no public Render URL available in this stage |
+| Live Render URL | `curl -s -o /dev/null -w "%{http_code}" <URL>` | Not run in the initial code/config stage; no public Render URL was available then |
 
 **Process docs**:
 - Updated `PLAN.md` T28 status to `implementation complete, live deployment pending`.
@@ -4316,3 +4316,54 @@
 1. Render deployment configuration can be verified locally for shape and safety, but public URL verification must stay separate evidence.
 2. Docker cloud platforms need `PORT` support even when local Docker uses a fixed exposed port.
 3. `sync: false` protects secrets in Blueprint files, but operators must still configure secret values in Render.
+
+### Live deployment completion addendum
+
+**Handoff / sync**:
+- User stated the Render Web Service was manually created and bound to the GitHub `main` branch.
+- User provided the real public URL: `https://coding-agent-harness-zq0k.onrender.com/`.
+- Confirmed branch `codex/task/T28-render-deploy` and clean worktree before live completion edits.
+- Scope remained T28 only; no T29 work was started.
+
+**Live Red phase**:
+- Subagent: Bohr (`019f63bc-e50c-7e80-86c0-0b26eb045a4c`), read-only live deployment evidence preparation.
+- Added failing README/render deployment checks for the real URL, observed HTTP evidence, WebUI markers, static resource status, and credential-pattern evidence.
+- `& $PY -m pytest tests/unit/test_render_deploy.py -v` -> 1 failed, 3 passed.
+- Failure cause: README did not yet record the real Render URL or live HTTP evidence; this was expected missing T28 live deployment evidence, not syntax, environment, dependency, or test-design failure.
+- Commit: `11e5e22` (`test(T28): add failing Render deployment checks [subagent: Bohr; human: pending review]`).
+
+**Live HTTP verification**:
+- PowerShell sandboxed `Invoke-WebRequest` first failed to connect because outbound network access was restricted.
+- Re-ran PowerShell `Invoke-WebRequest` with approved network escalation; no Render account changes, no Render token, and no secret values were requested.
+- First successful check at `2026-07-15T03:05:17Z`:
+  - `GET https://coding-agent-harness-zq0k.onrender.com/` -> 200, `text/html; charset=utf-8`, length 1647.
+  - Root page contained `Coding Agent Harness`, `HITL`, `/static/style.css`, and `/static/app.js`.
+  - `GET https://coding-agent-harness-zq0k.onrender.com/static/style.css` -> 200, `text/css; charset=utf-8`, length 1453.
+  - `GET https://coding-agent-harness-zq0k.onrender.com/static/app.js` -> 200, `application/javascript`, length 6538.
+  - Checked response bodies matched no credential pattern (`secret_pattern_match=False`).
+- Review recheck at `2026-07-15T03:15:02Z` repeated the same HTTP 200 statuses, content types, lengths, WebUI markers, static resource access, and credential-pattern result.
+
+**Live Green phase**:
+- Updated `README.md` to record the real Render URL and live verification evidence.
+- `& $PY -m pytest tests/unit/test_render_deploy.py tests/unit/test_readme.py -v` -> 8 passed.
+- Commit: `3aded89` (`feat(T28): add live Render deployment evidence [subagent: Bohr; human: pending review]`).
+
+**Live Review phase**:
+- Specification Compliance Review: Hubble (`019f63c4-449b-7121-9c93-7816c0600e82`), no Critical findings. Major findings: process docs still needed live status updates, and README still had stale text saying no Render URL was included.
+- Code Quality Review: Hooke (`019f63c4-ab4b-7811-9fca-086c61147c7e`), no Critical findings. Major finding: same stale README contradiction.
+- Fixed README contradiction and added a regression assertion.
+- `& $PY -m pytest tests/unit/test_render_deploy.py tests/unit/test_readme.py -v` -> 8 passed.
+- Commit: `7434a40` (`refactor(T28): complete deployment verification [subagent: Hubble/Hooke; human: pending review]`).
+
+**Live process docs**:
+- Updated `PLAN.md` T28 status to DONE with live Render deployment verified.
+- Updated `REQUIREMENTS_CHECKLIST.md` R036/R037 to DONE with public URL, HTTP 200, WebUI marker, static resource, CI/CD/free-tier, and credential safety evidence.
+- Updated this `AGENT_LOG.md` with live Red/Green/Review evidence and final verification placeholders.
+- Final verification was rerun after these docs updates and recorded in the final T28 response.
+
+**Human intervention**:
+- User manually created the Render Web Service and provided the public URL.
+- User required no Render account modification and no Render token request; complied.
+- User required completion before push; no push or merge was performed.
+- User required fixed Python `.\.venv\Scripts\python.exe`; all Python commands used `$PY` resolved to that path.
+- No T29 work was started.

@@ -948,7 +948,7 @@ T29 (final acceptance) ← depends on all
 11. **对应 worktree 和 PR 范围**: `feature/readme-deploy` / PR13
 12. **完成状态及 commit hash 记录位置**: 本文件 T28 行；AGENT_LOG.md
 
-**Status**: implementation complete, live deployment pending | **Commit**: 655c00b (Red), 129286f (Green), 3865295 (Review)
+**Status**: DONE - live Render deployment verified | **Commit**: 655c00b (Config Red), 129286f (Config Green), 3865295 (Config Review), ad35967 (Config Docs), 11e5e22 (Live Red), 3aded89 (Live Green), 7434a40 (Live Review)
 
 ---
 
