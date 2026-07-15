@@ -103,6 +103,13 @@ need an API key. A real `harness run` that calls DeepSeek does require the user 
 configure their own valid key with `harness key setup`. Do not put API keys in the
 repository, command-line arguments, Docker image layers, or shell history.
 
+DeepSeek runs use the OpenAI-compatible Chat Completions tool protocol. Tool schemas
+are sent as `type=function` entries, each assistant `tool_calls` response is followed
+by matching `role=tool` results before the next model request, and provider or
+malformed-response failures stop as `LLM_ERROR` instead of producing a traceback. The
+WebUI timeline shows model-request, model-error, tool-request, tool-completed, test,
+HITL, and finish events with redacted failure details.
+
 Run the harness against a natural-language requirement:
 
 ```powershell
@@ -292,6 +299,8 @@ dependencies. The direct dependencies currently use permissive licenses:
 
 The default real LLM client targets DeepSeek through an OpenAI-compatible chat
 completions shape. Real LLM runs require a configured API key and network access.
+If `harness key status` reports `not configured`, controlled real DeepSeek smoke
+checks are skipped rather than simulated.
 
 Docker commands require a local Docker runtime. Container image publishing and cloud
 deployment are separate release steps.

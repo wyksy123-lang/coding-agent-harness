@@ -16,6 +16,7 @@ def test_get_root_returns_html_page() -> None:
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
+    assert '<html lang="zh-CN">' in response.text
     assert "Coding Agent Harness" in response.text
     assert 'href="/static/style.css"' in response.text
     assert 'src="/static/app.js"' in response.text
@@ -40,6 +41,28 @@ def test_get_root_returns_html_page() -> None:
         assert raw_placeholder not in response.text.lower()
 
 
+def test_root_uses_fixed_chinese_status_labels() -> None:
+    response = TestClient(create_app()).get("/")
+
+    for label in [
+        "运行模式",
+        "任务状态",
+        "当前阶段",
+        "测试状态",
+        "测试通过",
+        "测试失败",
+        "失败类型",
+        "失败详情",
+        "当前轮次",
+        "当前策略",
+        "停止原因",
+        "运行时间线",
+        "人工审批",
+    ]:
+        assert label in response.text
+    assert "Not available" not in response.text
+
+
 def test_static_frontend_assets_are_served() -> None:
     client = TestClient(create_app())
 
@@ -51,11 +74,26 @@ def test_static_frontend_assets_are_served() -> None:
     assert 'message.type === "snapshot"' in app_js.text
     assert 'message.type === "event"' in app_js.text
     assert "renderTimeline" in app_js.text
+    assert "第 ${event.round_index} 轮" in app_js.text
+    assert "任务结束" in app_js.text
+    assert "model_error" in app_js.text
+    assert "Stop reason:" not in app_js.text
+    assert "unknown-request" not in app_js.text
+    assert '"tool"' not in app_js.text
+    assert "停止原因：" in app_js.text
+    assert "未知请求" in app_js.text
+    assert "工具" in app_js.text
+    assert "模型错误" in app_js.text
+    assert "slice(-20)" not in app_js.text
+    assert ".textContent" in app_js.text
     assert "approve" in app_js.text
     assert "deny" in app_js.text
     assert style_css.status_code == 200
     assert "#hitl-list" in style_css.text
     assert "#timeline-list" in style_css.text
+    assert ".timeline-divider" in style_css.text
+    assert ".timeline-node" in style_css.text
+    assert ".timeline-node.latest" in style_css.text
 
 
 def test_get_status_returns_current_agent_status() -> None:

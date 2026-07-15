@@ -43,7 +43,8 @@ class TestEnums:
         assert StopReason.MAX_ROUNDS.value == "MAX_ROUNDS"
         assert StopReason.STUCK.value == "STUCK"
         assert StopReason.HITL_DENIED.value == "HITL_DENIED"
-        assert len(StopReason) == 4
+        assert StopReason.LLM_ERROR.value == "LLM_ERROR"
+        assert len(StopReason) == 5
 
     def test_hitl_status_values(self):
         assert HITLStatus.PENDING.value == "PENDING"

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from harness.agent_loop import AgentLoop
+from harness.llm import base as llm_base
 from harness.llm.base import LLMClient, LLMResponse, ToolCall
 from harness.models import Config, HITLRequest, HITLStatus, StopReason
 from harness.run_events import RunEventType
@@ -28,6 +29,48 @@ class SequencedLLM(LLMClient):
         if isinstance(item, Exception):
             raise item
         return item
+
+
+class CapturingLLM(LLMClient):
+    def __init__(self, response: LLMResponse) -> None:
+        self.response = response
+        self.tools_seen: list[list[dict[str, Any]]] = []
+
+    def chat(
+        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
+    ) -> LLMResponse:
+        self.tools_seen.append(tools)
+        return self.response
+
+
+class SpyRegistry:
+    def __init__(self) -> None:
+        self.get_schemas_called = 0
+        self.get_llm_schemas_called = 0
+
+    def get_schemas(self) -> list[dict[str, Any]]:
+        self.get_schemas_called += 1
+        return [{"type": "object", "properties": {}, "required": []}]
+
+    def get_llm_schemas(self) -> list[dict[str, Any]]:
+        self.get_llm_schemas_called += 1
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "finish",
+                    "description": "Finish the task.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "required": [],
+                    },
+                },
+            }
+        ]
+
+    def dispatch(self, action: Any) -> ToolResult:
+        return ToolResult(success=True, output={})
 
 
 class SequencedRunTestsTool(Tool):
@@ -287,13 +330,179 @@ def test_run_publishes_lifecycle_events_for_passing_test_round(tmp_path: Path) -
     assert [event.event_type for event in events] == [
         RunEventType.TASK_STARTED,
         RunEventType.ROUND_STARTED,
+        RunEventType.MODEL_REQUESTED,
         RunEventType.MODEL_RESPONSE,
         RunEventType.TOOL_REQUESTED,
         RunEventType.TESTS_STARTED,
         RunEventType.TESTS_COMPLETED,
+        RunEventType.TOOL_COMPLETED,
         RunEventType.RUN_FINISHED,
     ]
+    assert events[-2].tool_name == "run_tests"
+    assert events[-2].tool_status == "success"
     assert events[-1].stop_reason == "PASS"
+
+
+def test_run_preserves_assistant_tool_calls_and_tool_results_for_next_request(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    llm = SequencedLLM(
+        [
+            _response("write_file", {"path": "created.py", "content": "x = 1"}),
+            _response("run_tests"),
+        ]
+    )
+    run_tests = SequencedRunTestsTool(tmp_path, [_pytest_report(0)])
+    registry = ToolRegistry(config)
+    registry.register(WriteFileToolDouble(success=True))
+    registry.register(run_tests)
+    loop = AgentLoop(config, llm, registry)
+
+    result = loop.run("write then test")
+
+    assert result.status == StopReason.PASS
+    second_messages = llm.messages_seen[1]
+    assert second_messages[-2]["role"] == "assistant"
+    assert second_messages[-2]["tool_calls"][0]["id"] == "call-write_file"
+    assert second_messages[-2]["tool_calls"][0]["function"]["name"] == "write_file"
+    assert second_messages[-1]["role"] == "tool"
+    assert second_messages[-1]["tool_call_id"] == "call-write_file"
+    tool_payload = json.loads(second_messages[-1]["content"])
+    assert tool_payload["success"] is True
+
+
+def test_agent_loop_sends_chat_completion_function_tools_to_llm(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path, max_rounds=1)
+    llm = CapturingLLM(_no_tool_response())
+    registry = SpyRegistry()
+    loop = AgentLoop(config, llm, registry)  # type: ignore[arg-type]
+
+    loop.run("capture model tools")
+
+    assert registry.get_llm_schemas_called >= 1
+    assert registry.get_schemas_called == 0
+    assert llm.tools_seen[0][0]["type"] == "function"
+    assert llm.tools_seen[0][0]["function"]["name"] == "finish"
+
+
+def test_llm_api_error_emits_model_error_and_single_finished_event(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    error = llm_base.LLMRequestError(
+        kind="http_400",
+        safe_message="DeepSeek rejected the request with HTTP 400: invalid tool schema",
+        status_code=400,
+        retryable=False,
+        provider="deepseek",
+    )
+    llm = SequencedLLM([error])
+    events: list[Any] = []
+    loop = AgentLoop(config, llm, ToolRegistry(config), event_sink=events.append)
+
+    result = loop.run("fail safely")
+
+    assert result.status == StopReason.LLM_ERROR
+    assert [event.event_type for event in events] == [
+        RunEventType.TASK_STARTED,
+        RunEventType.ROUND_STARTED,
+        RunEventType.MODEL_REQUESTED,
+        RunEventType.MODEL_ERROR,
+        RunEventType.RUN_FINISHED,
+    ]
+    assert events[-2].summary == error.safe_message
+    assert events[-1].stop_reason == "LLM_ERROR"
+    assert len(
+        [event for event in events if event.event_type == RunEventType.RUN_FINISHED]
+    ) == 1
+
+
+def test_provider_llm_errors_are_not_retried_by_agent_loop(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    error = llm_base.LLMRequestError(
+        kind="http_503",
+        safe_message="DeepSeek rejected the request with HTTP 503: unavailable",
+        status_code=503,
+        retryable=True,
+        provider="deepseek",
+    )
+    llm = SequencedLLM([error, _response("run_tests")])
+    loop = AgentLoop(config, llm, ToolRegistry(config))
+
+    result = loop.run("provider already retried")
+
+    assert result.status == StopReason.LLM_ERROR
+    assert len(llm.messages_seen) == 1
+
+
+def test_unknown_llm_exception_becomes_model_error_event(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    llm = SequencedLLM(
+        [
+            RuntimeError("transient"),
+            RuntimeError("still broken"),
+            RuntimeError("terminal"),
+        ]
+    )
+    events: list[Any] = []
+    loop = AgentLoop(config, llm, ToolRegistry(config), event_sink=events.append)
+
+    result = loop.run("fail safely")
+
+    assert result.status == StopReason.LLM_ERROR
+    assert len(llm.messages_seen) == 3
+    assert [event.event_type for event in events][-2:] == [
+        RunEventType.MODEL_ERROR,
+        RunEventType.RUN_FINISHED,
+    ]
+    assert events[-2].metadata["failure_type"] == "LLM_API_ERROR"
+
+
+def test_multitool_failure_adds_tool_result_for_every_tool_call(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    llm = SequencedLLM(
+        [
+            _multi_response(
+                [
+                    _tool_call("write_file", {"path": "created.py", "content": "x = 1"}),
+                    _tool_call("run_tests"),
+                ]
+            ),
+            _response("run_tests"),
+        ]
+    )
+    run_tests = SequencedRunTestsTool(tmp_path, [_pytest_report(0)])
+    registry = ToolRegistry(config)
+    registry.register(WriteFileToolDouble(success=False))
+    registry.register(run_tests)
+    loop = AgentLoop(config, llm, registry)
+
+    result = loop.run("write then test")
+
+    assert result.status == StopReason.PASS
+    second_messages = llm.messages_seen[1]
+    assert second_messages[-3]["role"] == "assistant"
+    tool_messages = second_messages[-2:]
+    assert [message["role"] for message in tool_messages] == ["tool", "tool"]
+    assert [message["tool_call_id"] for message in tool_messages] == [
+        "call-write_file",
+        "call-run_tests",
+    ]
+    skipped_payload = json.loads(tool_messages[-1]["content"])
+    assert skipped_payload["success"] is False
+    assert skipped_payload["output"]["status"] == "SKIPPED"
+    assert all(
+        not (
+            message.get("role") == "user"
+            and "tool_error" in str(message.get("content", ""))
+        )
+        for message in second_messages
+    )
 
 
 def test_run_executes_approved_command_once_then_continues(tmp_path: Path) -> None:
@@ -383,9 +592,22 @@ def test_tool_dispatch_failure_is_fed_back_to_next_round(tmp_path: Path) -> None
     result = loop.run("use an unknown tool then recover")
 
     assert result.status == StopReason.PASS
-    second_prompt = "\n".join(str(message) for message in llm.messages_seen[1])
+    second_messages = llm.messages_seen[1]
+    second_prompt = "\n".join(str(message) for message in second_messages)
     assert "missing_tool" in second_prompt
-    assert "tool_error" in second_prompt
+    assert any(
+        message.get("role") == "tool"
+        and message.get("tool_call_id") == "call-missing_tool"
+        and json.loads(str(message.get("content")))["success"] is False
+        for message in second_messages
+    )
+    assert all(
+        not (
+            message.get("role") == "user"
+            and "tool_error" in str(message.get("content", ""))
+        )
+        for message in second_messages
+    )
 
 
 def test_output_files_include_only_successful_writes(tmp_path: Path) -> None:

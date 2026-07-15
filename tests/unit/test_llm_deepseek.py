@@ -9,8 +9,12 @@ import httpx
 import pytest
 from httpx import MockTransport
 
+import harness.llm.base as llm_base
+from harness.agent_loop import AgentLoop
+from harness.cli import build_tool_registry
 from harness.llm.base import LLMClient, LLMResponse, ToolCall
 from harness.llm.deepseek import DeepSeekClient
+from harness.models import Config
 
 FAKE_API_KEY = "sk-fake-test-key-not-real"
 
@@ -215,7 +219,16 @@ class TestDeepSeekClientRequestConstruction:
             return httpx.Response(200, json=_make_api_response())
 
         messages = [{"role": "user", "content": "hi"}]
-        tools = [{"type": "function", "function": {"name": "write_file"}}]
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "write_file",
+                    "description": "Write a file",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            }
+        ]
         client = _make_client(
             transport=MockTransport(handler),
             model="deepseek-chat",
@@ -413,6 +426,94 @@ class TestDeepSeekClientResponseParsingMultipleToolCalls:
         assert ids == ["first", "second", "third"]
 
 
+class TestDeepSeekClientMalformedResponses:
+    def test_non_json_success_response_raises_structured_response_error(self):
+        transport = MockTransport(lambda req: httpx.Response(200, content=b"not-json"))
+        client = _make_client(transport=transport)
+
+        with pytest.raises(llm_base.LLMResponseError) as exc_info:
+            client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
+
+        assert exc_info.value.provider == "deepseek"
+        assert exc_info.value.retryable is False
+        assert "response" in exc_info.value.kind
+        assert FAKE_API_KEY not in exc_info.value.safe_message
+
+    def test_missing_choices_raises_response_error_not_key_error(self):
+        transport = MockTransport(lambda req: httpx.Response(200, json={"id": "bad"}))
+        client = _make_client(transport=transport)
+
+        with pytest.raises(llm_base.LLMResponseError) as exc_info:
+            client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
+
+        assert not isinstance(exc_info.value.__cause__, KeyError)
+        assert exc_info.value.retryable is False
+
+    def test_empty_choices_raises_response_error_not_index_error(self):
+        transport = MockTransport(lambda req: httpx.Response(200, json={"choices": []}))
+        client = _make_client(transport=transport)
+
+        with pytest.raises(llm_base.LLMResponseError) as exc_info:
+            client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
+
+        assert not isinstance(exc_info.value.__cause__, IndexError)
+
+    def test_invalid_tool_arguments_raise_response_error_not_json_decode_error(self):
+        bad_call = {
+            "id": "call_bad",
+            "type": "function",
+            "function": {"name": "write_file", "arguments": "{not-json"},
+        }
+        transport = MockTransport(
+            lambda req: httpx.Response(
+                200,
+                json=_make_api_response(
+                    content=None,
+                    finish_reason="tool_calls",
+                    tool_calls=[bad_call],
+                ),
+            )
+        )
+        client = _make_client(transport=transport)
+
+        with pytest.raises(llm_base.LLMResponseError) as exc_info:
+            client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
+
+        assert "arguments" in exc_info.value.safe_message.lower()
+
+    def test_content_null_is_parsed_as_empty_string_for_valid_response(self):
+        transport = MockTransport(
+            lambda req: httpx.Response(200, json=_make_api_response(content=None))
+        )
+        client = _make_client(transport=transport)
+
+        result = client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
+
+        assert result.content == ""
+
+    def test_missing_tool_call_id_raises_response_error(self):
+        bad_call = {
+            "type": "function",
+            "function": {"name": "write_file", "arguments": "{}"},
+        }
+        transport = MockTransport(
+            lambda req: httpx.Response(
+                200,
+                json=_make_api_response(
+                    content="",
+                    finish_reason="tool_calls",
+                    tool_calls=[bad_call],
+                ),
+            )
+        )
+        client = _make_client(transport=transport)
+
+        with pytest.raises(llm_base.LLMResponseError) as exc_info:
+            client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
+
+        assert "tool call" in exc_info.value.safe_message.lower()
+
+
 class TestDeepSeekClientRetryLogic:
     def test_retries_on_connect_error_then_raises(self):
         call_count = 0
@@ -424,9 +525,10 @@ class TestDeepSeekClientRetryLogic:
 
         transport = MockTransport(handler)
         client = _make_client(transport=transport, retry_count=3)
-        with pytest.raises(httpx.ConnectError):
+        with pytest.raises(llm_base.LLMRequestError) as exc_info:
             client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
         assert call_count == 4
+        assert exc_info.value.retryable is True
 
     def test_retries_on_read_timeout_then_raises(self):
         call_count = 0
@@ -438,9 +540,10 @@ class TestDeepSeekClientRetryLogic:
 
         transport = MockTransport(handler)
         client = _make_client(transport=transport, retry_count=2)
-        with pytest.raises(httpx.ReadTimeout):
+        with pytest.raises(llm_base.LLMRequestError) as exc_info:
             client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
         assert call_count == 3
+        assert exc_info.value.retryable is True
 
     def test_retries_on_http_500_then_raises(self):
         call_count = 0
@@ -452,9 +555,11 @@ class TestDeepSeekClientRetryLogic:
 
         transport = MockTransport(handler)
         client = _make_client(transport=transport, retry_count=2)
-        with pytest.raises(httpx.HTTPStatusError):
+        with pytest.raises(llm_base.LLMRequestError) as exc_info:
             client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
         assert call_count == 3
+        assert exc_info.value.status_code == 500
+        assert exc_info.value.retryable is True
 
     def test_retries_on_http_429_then_raises(self):
         call_count = 0
@@ -466,9 +571,11 @@ class TestDeepSeekClientRetryLogic:
 
         transport = MockTransport(handler)
         client = _make_client(transport=transport, retry_count=3)
-        with pytest.raises(httpx.HTTPStatusError):
+        with pytest.raises(llm_base.LLMRequestError) as exc_info:
             client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
         assert call_count == 4
+        assert exc_info.value.status_code == 429
+        assert exc_info.value.retryable is True
 
     def test_no_retries_when_retry_count_is_zero(self):
         call_count = 0
@@ -480,7 +587,7 @@ class TestDeepSeekClientRetryLogic:
 
         transport = MockTransport(handler)
         client = _make_client(transport=transport, retry_count=0)
-        with pytest.raises(httpx.ConnectError):
+        with pytest.raises(llm_base.LLMRequestError):
             client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
         assert call_count == 1
 
@@ -494,7 +601,7 @@ class TestDeepSeekClientRetryLogic:
 
         transport = MockTransport(handler)
         client = _make_client(transport=transport, retry_count=1)
-        with pytest.raises(httpx.ConnectError):
+        with pytest.raises(llm_base.LLMRequestError):
             client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
         assert call_count == 2
 
@@ -628,29 +735,93 @@ class TestDeepSeekClientNoHardcodedApiKey:
 
 
 class TestDeepSeekClientNonRetriableErrors:
-    def test_http_401_raises_http_status_error(self):
+    def test_http_401_raises_safe_request_error(self):
         transport = MockTransport(
             lambda req: httpx.Response(401, json={"error": {"message": "unauthorized"}})
         )
         client = _make_client(transport=transport, retry_count=3)
-        with pytest.raises(httpx.HTTPStatusError):
+        with pytest.raises(llm_base.LLMRequestError) as exc_info:
             client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
+        assert exc_info.value.status_code == 401
+        assert exc_info.value.retryable is False
+        assert "credential" in exc_info.value.safe_message.lower()
 
-    def test_http_403_raises_http_status_error(self):
+    def test_http_403_raises_safe_request_error(self):
         transport = MockTransport(
             lambda req: httpx.Response(403, json={"error": {"message": "forbidden"}})
         )
         client = _make_client(transport=transport, retry_count=3)
-        with pytest.raises(httpx.HTTPStatusError):
+        with pytest.raises(llm_base.LLMRequestError):
             client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
 
-    def test_http_400_raises_http_status_error(self):
+    def test_http_400_raises_safe_request_error_without_retry(self):
+        call_count = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            return httpx.Response(
+                400,
+                json={"error": {"message": "invalid tool schema"}},
+            )
+
+        transport = MockTransport(handler)
+        client = _make_client(transport=transport, retry_count=3)
+        with pytest.raises(llm_base.LLMRequestError) as exc_info:
+            client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
+        assert call_count == 1
+        assert exc_info.value.status_code == 400
+        assert exc_info.value.retryable is False
+        assert "invalid tool schema" in exc_info.value.safe_message
+
+    @pytest.mark.parametrize("status_code", [408, 429, 500, 502, 503, 504])
+    def test_retriable_http_errors_retry_then_raise_request_error(self, status_code):
+        call_count = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            return httpx.Response(
+                status_code,
+                json={"error": {"message": f"retryable {status_code}"}},
+            )
+
+        transport = MockTransport(handler)
+        client = _make_client(transport=transport, retry_count=2)
+        with pytest.raises(llm_base.LLMRequestError) as exc_info:
+            client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
+        assert call_count == 3
+        assert exc_info.value.status_code == status_code
+        assert exc_info.value.retryable is True
+
+    def test_http_422_raises_safe_request_error_without_retry(self):
+        call_count = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            return httpx.Response(
+                422,
+                json={"error": {"message": "semantic request error"}},
+            )
+
+        transport = MockTransport(handler)
+        client = _make_client(transport=transport, retry_count=3)
+        with pytest.raises(llm_base.LLMRequestError) as exc_info:
+            client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
+        assert call_count == 1
+        assert exc_info.value.status_code == 422
+        assert exc_info.value.retryable is False
+
+    def test_http_402_mentions_quota_without_retry(self):
         transport = MockTransport(
-            lambda req: httpx.Response(400, json={"error": {"message": "bad request"}})
+            lambda req: httpx.Response(402, json={"error": {"message": "balance low"}})
         )
         client = _make_client(transport=transport, retry_count=3)
-        with pytest.raises(httpx.HTTPStatusError):
+        with pytest.raises(llm_base.LLMRequestError) as exc_info:
             client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
+        assert exc_info.value.status_code == 402
+        assert "quota" in exc_info.value.safe_message.lower()
 
     def test_non_retriable_error_does_not_retry(self):
         call_count = 0
@@ -662,9 +833,182 @@ class TestDeepSeekClientNonRetriableErrors:
 
         transport = MockTransport(handler)
         client = _make_client(transport=transport, retry_count=3)
-        with pytest.raises(httpx.HTTPStatusError):
+        with pytest.raises(llm_base.LLMRequestError):
             client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
         assert call_count == 1
+
+    def test_timeout_retries_then_raises_request_error(self):
+        call_count = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            raise httpx.ReadTimeout("read timed out")
+
+        transport = MockTransport(handler)
+        client = _make_client(transport=transport, retry_count=2)
+
+        with pytest.raises(llm_base.LLMRequestError) as exc_info:
+            client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
+
+        assert call_count == 3
+        assert exc_info.value.retryable is True
+        assert exc_info.value.status_code is None
+
+    def test_request_errors_retry_then_raise_safe_request_error(self):
+        call_count = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            raise httpx.RemoteProtocolError(
+                "server dropped Authorization: Bearer "
+                f"{FAKE_API_KEY} from C:\\Users\\alice\\project\\.env"
+            )
+
+        transport = MockTransport(handler)
+        client = _make_client(transport=transport, retry_count=2)
+
+        with pytest.raises(llm_base.LLMRequestError) as exc_info:
+            client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
+
+        assert call_count == 3
+        assert exc_info.value.retryable is True
+        assert exc_info.value.status_code is None
+        assert FAKE_API_KEY not in exc_info.value.safe_message
+        assert "Bearer" not in exc_info.value.safe_message
+        assert "C:\\Users\\alice" not in exc_info.value.safe_message
+        assert ".env" not in exc_info.value.safe_message
+
+    def test_http_error_message_redacts_tokens_and_paths(self):
+        transport = MockTransport(
+            lambda req: httpx.Response(
+                400,
+                json={
+                    "error": {
+                        "message": (
+                            "bad Authorization: Bearer "
+                            f"{FAKE_API_KEY} at C:\\Users\\alice\\repo\\.env"
+                        )
+                    }
+                },
+            )
+        )
+        client = _make_client(transport=transport, retry_count=0)
+
+        with pytest.raises(llm_base.LLMRequestError) as exc_info:
+            client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
+
+        safe_message = exc_info.value.safe_message
+        assert FAKE_API_KEY not in safe_message
+        assert "Bearer" not in safe_message
+        assert "C:\\Users\\alice" not in safe_message
+        assert ".env" not in safe_message
+
+    def test_unknown_finish_reason_is_preserved_without_response_error(self):
+        transport = MockTransport(
+            lambda req: httpx.Response(
+                200,
+                json=_make_api_response(content="Done.", finish_reason="content_filter"),
+            )
+        )
+        client = _make_client(transport=transport)
+
+        result = client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
+
+        assert result.finish_reason == "content_filter"
+
+
+class TestDeepSeekClientToolSchemaContract:
+    def test_deepseek_rejects_raw_parameter_schemas_before_http(self):
+        call_count = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            return httpx.Response(200, json=_make_api_response())
+
+        transport = MockTransport(handler)
+        client = _make_client(transport=transport, retry_count=3)
+
+        with pytest.raises(llm_base.LLMRequestError) as exc_info:
+            client.chat(
+                messages=[{"role": "user", "content": "hi"}],
+                tools=[{"type": "object", "properties": {}, "required": []}],
+            )
+
+        assert call_count == 0
+        assert exc_info.value.kind == "invalid_tool_schema"
+        assert exc_info.value.retryable is False
+        assert FAKE_API_KEY not in exc_info.value.safe_message
+
+    def test_deepseek_sends_standard_function_tool_schemas(self, tmp_path: Path):
+        captured_payloads: list[dict[str, Any]] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured_payloads.append(json.loads(request.content))
+            return httpx.Response(200, json=_make_api_response())
+
+        registry = build_tool_registry(Config(target_directory=str(tmp_path)))
+        transport = MockTransport(handler)
+        client = _make_client(transport=transport, retry_count=3)
+
+        result = client.chat(
+            messages=[{"role": "user", "content": "hi"}],
+            tools=registry.get_llm_schemas(),
+        )
+
+        assert result.content == "Hello!"
+        assert len(captured_payloads) == 1
+        tools = captured_payloads[0]["tools"]
+        assert {tool["type"] for tool in tools} == {"function"}
+        assert {tool["function"]["name"] for tool in tools} == {
+            "write_file",
+            "read_file",
+            "list_files",
+            "run_command",
+            "run_tests",
+            "finish",
+        }
+        assert all(tool["function"]["description"] for tool in tools)
+        assert all(tool["function"]["parameters"]["type"] == "object" for tool in tools)
+
+    def test_agent_loop_to_deepseek_http_body_contains_function_tool_schemas(
+        self,
+        tmp_path: Path,
+    ):
+        captured_payloads: list[dict[str, Any]] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured_payloads.append(json.loads(request.content))
+            return httpx.Response(200, json=_make_api_response(content="", finish_reason="stop"))
+
+        config = Config(target_directory=str(tmp_path), max_rounds=1, llm_retry_count=0)
+        registry = build_tool_registry(config)
+        client = _make_client(transport=MockTransport(handler), retry_count=0)
+        loop = AgentLoop(config, client, registry)
+
+        loop.run("capture production HTTP body")
+
+        assert len(captured_payloads) == 1
+        payload = captured_payloads[0]
+        rendered_body = json.dumps(payload)
+        assert FAKE_API_KEY not in rendered_body
+        assert "Authorization" not in rendered_body
+        tools = payload["tools"]
+        assert len(tools) == 6
+        assert [tool["function"]["name"] for tool in tools] == [
+            "write_file",
+            "read_file",
+            "list_files",
+            "run_command",
+            "run_tests",
+            "finish",
+        ]
+        assert len({tool["function"]["name"] for tool in tools}) == 6
+        assert all(tool["type"] == "function" for tool in tools)
+        assert all(tool["function"]["description"] for tool in tools)
+        assert all(tool["function"]["parameters"]["type"] == "object" for tool in tools)
 
 
 class TestDeepSeekClientResourceCleanup:

@@ -152,7 +152,7 @@ class WebUIState:
     def _snapshot_payload_locked(self) -> dict[str, Any]:
         summary = self._snapshot.get("test_summary")
         if not isinstance(summary, dict):
-            summary = {"passed": 0, "failed": 0}
+            summary = {"passed": None, "failed": None}
         return {
             "mode": self.mode,
             "run_id": self.run_id,
@@ -162,8 +162,8 @@ class WebUIState:
             "round_number": self._snapshot.get("round_index", 0),
             "test_status": self._snapshot.get("test_status"),
             "test_summary": {
-                "passed": int(summary.get("passed", 0)),
-                "failed": int(summary.get("failed", 0)),
+                "passed": _optional_int(summary.get("passed")),
+                "failed": _optional_int(summary.get("failed")),
             },
             "failure_type": self._snapshot.get("failure_type"),
             "failure_details": list(self._snapshot.get("failure_details", [])),
@@ -195,6 +195,20 @@ def _display_value(value: object) -> str:
     if rendered.lower() in {"unknown", "none", "null", "undefined"}:
         return "Not available"
     return rendered
+
+
+def _optional_int(value: object) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        return int(value)
+    return None
 
 
 def _status_for_legacy_phase(phase: str) -> str:

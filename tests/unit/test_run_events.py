@@ -132,6 +132,86 @@ def test_tests_and_finish_events_update_snapshot_semantics() -> None:
     assert snapshot["stop_reason"] == "PASS"
 
 
+def test_model_error_event_sets_failed_snapshot_with_safe_failure_details() -> None:
+    snapshot = apply_event_to_snapshot(
+        None,
+        RunEvent(
+            event_id="evt-1",
+            run_id="run-1",
+            event_type=RunEventType.MODEL_ERROR,
+            phase=RunPhase.FAILED,
+            stop_reason="LLM_ERROR",
+            summary="DeepSeek rejected the request with HTTP 400: invalid tool schema",
+            metadata={
+                "failure_type": "LLM_API_ERROR",
+                "failure_details": (
+                    "DeepSeek rejected the request with HTTP 400: invalid tool schema"
+                ),
+            },
+        ),
+    )
+
+    assert snapshot["phase"] == "failed"
+    assert snapshot["status"] == "Failed"
+    assert snapshot["stop_reason"] == "LLM_ERROR"
+    assert snapshot["failure_type"] == "LLM_API_ERROR"
+    assert snapshot["failure_details"] == [
+        {
+            "message": "DeepSeek rejected the request with HTTP 400: invalid tool schema"
+        }
+    ]
+    assert snapshot["test_status"] == "not_started"
+
+
+def test_model_error_snapshot_redacts_safe_failure_details() -> None:
+    snapshot = apply_event_to_snapshot(
+        None,
+        RunEvent(
+            event_id="evt-1",
+            run_id="run-1",
+            event_type=RunEventType.MODEL_ERROR,
+            phase=RunPhase.FAILED,
+            stop_reason="LLM_ERROR",
+            summary=(
+                "DeepSeek failed with Authorization: Bearer sk-fake-test-key-not-real "
+                "from C:\\Users\\alice\\repo\\.env"
+            ),
+            metadata={
+                "failure_type": "LLM_API_ERROR",
+                "failure_details": (
+                    "DeepSeek failed with Authorization: Bearer "
+                    "sk-fake-test-key-not-real from C:\\Users\\alice\\repo\\.env"
+                ),
+            },
+        ),
+    )
+
+    rendered = str(snapshot["failure_details"])
+    assert "sk-fake-test-key-not-real" not in rendered
+    assert "Bearer" not in rendered
+    assert "C:\\Users\\alice" not in rendered
+    assert ".env" not in rendered
+
+
+def test_run_event_summary_redacts_secrets_and_paths() -> None:
+    event = RunEvent(
+        event_id="evt-1",
+        run_id="run-1",
+        event_type=RunEventType.MODEL_ERROR,
+        summary=(
+            "Authorization: Bearer sk-fake-test-key-not-real "
+            "C:\\Users\\alice\\repo\\.env"
+        ),
+    )
+
+    payload = event.to_dict()
+
+    assert "sk-fake-test-key-not-real" not in payload["summary"]
+    assert "Bearer" not in payload["summary"]
+    assert "C:\\Users\\alice" not in payload["summary"]
+    assert ".env" not in payload["summary"]
+
+
 def test_run_event_metadata_sanitizer_redacts_secrets_headers_env_and_paths() -> None:
     metadata = {
         "api_key": "sk-test-secret",
