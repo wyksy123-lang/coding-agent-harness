@@ -50,6 +50,25 @@ def test_github_actions_workflow_defines_test_lint_and_typecheck_jobs() -> None:
         )
 
 
+def test_github_actions_workflow_builds_docker_image_without_publishing() -> None:
+    workflow = _load_workflow()
+
+    docker_job = workflow["jobs"]["docker-build"]
+
+    assert docker_job["name"] == "Docker image build"
+    assert docker_job["runs-on"] == "ubuntu-latest"
+    assert any(step.get("uses") == "actions/checkout@v4" for step in docker_job["steps"])
+    build_steps = [
+        step for step in docker_job["steps"] if step.get("uses") == "docker/build-push-action@v6"
+    ]
+    assert len(build_steps) == 1
+    build_config = build_steps[0]["with"]
+    assert build_config["context"] == "."
+    assert build_config["file"] == "./Dockerfile"
+    assert build_config["push"] is False
+    assert build_config["tags"] == "coding-agent-harness:ci"
+
+
 def test_github_actions_workflow_runs_project_ci_commands() -> None:
     workflow = _load_workflow()
     jobs = workflow["jobs"]
