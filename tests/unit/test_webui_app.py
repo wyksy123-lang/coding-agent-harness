@@ -182,7 +182,7 @@ def test_status_redacts_path_like_hitl_action_args() -> None:
 
 
 def test_hitl_approval_endpoint_updates_pending_request() -> None:
-    state = WebUIState()
+    state = WebUIState(mode="live")
     request = state.hitl_state.create(
         Action(tool_name="run_command", args={"cmd": "rm -rf workspace"}),
         timeout=30,
@@ -204,7 +204,7 @@ def test_hitl_approval_endpoint_updates_pending_request() -> None:
 
 
 def test_hitl_approval_endpoint_rejects_invalid_decision() -> None:
-    state = WebUIState()
+    state = WebUIState(mode="live")
     request = state.hitl_state.create(
         Action(tool_name="run_command", args={"cmd": "rm -rf workspace"}),
         timeout=30,
@@ -221,7 +221,7 @@ def test_hitl_approval_endpoint_rejects_invalid_decision() -> None:
 
 
 def test_hitl_approval_endpoint_returns_not_found_for_unknown_request() -> None:
-    client = TestClient(create_app(WebUIState()))
+    client = TestClient(create_app(WebUIState(mode="live")))
 
     response = client.post("/api/hitl/missing", json={"decision": "approve"})
 
@@ -229,7 +229,7 @@ def test_hitl_approval_endpoint_returns_not_found_for_unknown_request() -> None:
 
 
 def test_hitl_approval_endpoint_denies_pending_request() -> None:
-    state = WebUIState()
+    state = WebUIState(mode="live")
     request = state.hitl_state.create(
         Action(tool_name="run_command", args={"cmd": "rm -rf workspace"}),
         timeout=30,
@@ -287,7 +287,7 @@ def test_websocket_pushes_hitl_pending_updates_after_connect() -> None:
 
 
 def test_hitl_approval_endpoint_rejects_invalid_json_body() -> None:
-    state = WebUIState()
+    state = WebUIState(mode="live")
     request = state.hitl_state.create(
         Action(tool_name="run_command", args={"cmd": "rm -rf workspace"}),
         timeout=30,
@@ -302,3 +302,20 @@ def test_hitl_approval_endpoint_rejects_invalid_json_body() -> None:
 
     assert response.status_code == 400
     assert "json" in response.json()["detail"].lower()
+
+
+def test_demo_mode_rejects_hitl_mutations() -> None:
+    state = WebUIState(mode="demo")
+    request = state.hitl_state.create(
+        Action(tool_name="run_command", args={"cmd": "rm -rf workspace"}),
+        timeout=30,
+    )
+    client = TestClient(create_app(state))
+
+    response = client.post(
+        f"/api/hitl/{request.request_id}",
+        json={"decision": "approve"},
+    )
+
+    assert response.status_code == 403
+    assert "demo" in response.json()["detail"].lower()
