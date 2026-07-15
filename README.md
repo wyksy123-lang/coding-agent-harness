@@ -147,7 +147,9 @@ route served by FastAPI.
 
 Set `DEEPSEEK_API_KEY` in Render as a secret environment variable. The blueprint
 marks it with `sync: false`; no real API key, token, or password is stored in this
-repository or baked into the image.
+repository or baked into the image. Render prompts for `sync: false` values during
+initial Blueprint creation; for later syncs or existing services, keep the secret
+configured manually in Render.
 
 CI/CD flow: push a task branch, wait for GitHub Actions checks to pass, merge to
 `main`, then let Render deploy the checked revision from the Dockerfile. Free Render
