@@ -238,8 +238,8 @@ def _handle_run(args: argparse.Namespace, dependencies: CLIDependencies) -> int:
         )
     else:
         result = dependencies.make_agent_loop(config, api_key).run(requirement)
-    print(f"model: {config.model}")
     print(f"status: {_status_value(result.status)}")
+    print(f"model: {config.model}")
     if result.output_files:
         print("output_files:")
         for output_file in result.output_files:

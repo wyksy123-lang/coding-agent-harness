@@ -141,6 +141,7 @@ def test_run_without_model_preserves_loaded_config_model(capsys: Any) -> None:
 
     output = capsys.readouterr().out
     assert exit_code == 0
+    assert len(factory_inputs) == 1
     assert factory_inputs[0][0].model == "configured-model"
     assert config.model == "configured-model"
     assert "model: configured-model" in output
@@ -168,6 +169,7 @@ def test_run_model_flash_overrides_config_for_current_run_only(
 
     output = capsys.readouterr().out
     assert exit_code == 0
+    assert len(factory_inputs) == 1
     assert factory_inputs[0][0].model == "deepseek-v4-flash"
     assert factory_inputs[0][0] is not config
     assert config.model == "configured-model"
@@ -197,6 +199,7 @@ def test_run_model_pro_overrides_config_for_current_run_only(
 
     output = capsys.readouterr().out
     assert exit_code == 0
+    assert len(factory_inputs) == 1
     assert factory_inputs[0][0].model == "deepseek-v4-pro"
     assert config.model == "configured-model"
     assert "model: deepseek-v4-pro" in output
@@ -258,6 +261,7 @@ def test_run_web_model_flash_passes_override_to_web_runner(
 
     output = capsys.readouterr().out
     assert exit_code == 0
+    assert len(calls) == 1
     assert calls[0][1].model == "deepseek-v4-flash"
     assert config.model == "configured-model"
     assert not make_agent_loop_called
@@ -293,6 +297,7 @@ def test_run_web_model_pro_accepts_web_before_model_order(
 
     output = capsys.readouterr().out
     assert exit_code == 0
+    assert len(calls) == 1
     assert calls[0][1].model == "deepseek-v4-pro"
     assert config.model == "configured-model"
     assert "model: deepseek-v4-pro" in output
