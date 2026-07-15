@@ -4367,3 +4367,257 @@
 - User required completion before push; no push or merge was performed.
 - User required fixed Python `.\.venv\Scripts\python.exe`; all Python commands used `$PY` resolved to that path.
 - No T29 work was started.
+
+---
+
+## LOG-058 - T29 final acceptance
+
+**Timestamp**: 2026-07-15
+**Environment**: Windows Codex checkout, fixed project venv `./.venv/Scripts/python.exe`
+**Worktree**: `C:\Users\裴斐\Documents\coding-agent-harness-codex`
+**Branch**: `codex/task/T29-final-acceptance`
+**Base main**: `8809ffe` (`Merge pull request #34 from wyksy123-lang/codex/task/T28-render-deploy`)
+**Task**: T29 - final acceptance
+**Status**: BLOCKED - local checks passed and R035 config gap fixed; external/student evidence pending
+
+**Handoff / sync**:
+- User stated T28 was checked and pushed, and requested the next task.
+- `git fetch origin main` failed twice because GitHub network access reset/timed out, but local refs already showed `main`, `origin/main`, and `origin/HEAD` at `8809ffe`.
+- Verified T28 docs commit `1c2c1cb` is an ancestor of both `main` and `origin/main`.
+- Created branch `codex/task/T29-final-acceptance` from `main`.
+- Confirmed required Python: `./.venv/Scripts/python.exe`, Python 3.11.15.
+
+**Task selection**:
+- PLAN first incomplete task with dependencies satisfied: T29 final acceptance.
+- Goal: verify AC1-AC25, update requirement statuses, and record final evidence.
+- Files: `REQUIREMENTS_CHECKLIST.md`, `PLAN.md`, `AGENT_LOG.md`, plus CI config/tests only for the discovered R035 gap.
+- PLAN Red/Green command: `make test && make lint && make typecheck && make demo`.
+- Local Windows deviation: `make` is unavailable and the Makefile uses bare `pytest`/`ruff`/`mypy`/`python`, which conflicts with the fixed `$PY` requirement. Therefore T29 used `$PY` equivalents and recorded the deviation.
+
+### Acceptance prep
+
+**Subagent**: Ampere (`019f63ee-0e14-7212-b8a7-72f779503fe5`)
+**Role**: read-only T29 final acceptance preparation.
+**Result**:
+- Confirmed T29 scope and dependencies.
+- Identified local commands to collect: `$PY -m pytest`, `$PY -m ruff`, `$PY -m mypy`, `$PY -m demo.run_demo`, Render checks, status/log scans, and credential scans.
+- Identified blockers: absent `REFLECTION.md`, no Docker CLI, no `gh` CLI, no NJU/GitLab remote, GitLab `unit-test` pass unverifiable, and R035 CI Docker build gap.
+- Reported GitHub PR #34 merged and GitHub Actions run `29387362909` success for six test/ruff/mypy jobs on PR #34 head commit `1c2c1cb`.
+
+### Red phase
+
+**Reason for Red despite PLAN N/A**:
+- PLAN T29 says no new tests because T29 is an acceptance task.
+- Acceptance audit found a real unmet requirement: R035 requires CI to build a Docker image when container distribution is selected, but `.github/workflows/ci.yml` only had test/lint/typecheck jobs.
+- A narrow failing test was added to guard this missing CI behavior instead of marking acceptance as passed.
+
+**Red test**:
+- Added `tests/unit/test_github_actions_ci.py::test_github_actions_workflow_builds_docker_image_without_publishing`.
+- `& $PY -m pytest tests/unit/test_github_actions_ci.py -v` -> 1 failed, 5 passed.
+- Failure cause: `KeyError: 'docker-build'`, proving the workflow lacked the Docker build job.
+- Failure classification: expected missing R035 CI behavior, not syntax, environment, dependency, or test-design error.
+
+**Commit**: `048fa29` (`test(T29): add failing final acceptance CI checks [subagent: Ampere; human: pending review]`)
+
+### Green phase
+
+**Implementation**:
+- Added GitHub Actions `docker-build` job:
+  - `runs-on: ubuntu-latest`
+  - `docker/setup-buildx-action@v3`
+  - `docker/build-push-action@v6`
+  - `context: .`
+  - `file: ./Dockerfile`
+  - `push: false`
+  - `tags: coding-agent-harness:ci`
+- No registry publish, API key, token, password, or secret was added.
+
+**Green verification**:
+- `& $PY -m pytest tests/unit/test_github_actions_ci.py tests/unit/test_gitlab_ci.py tests/unit/test_distribution.py -v` -> 13 passed.
+
+**Commit**: `1a862b6` (`feat(T29): add CI Docker image build verification [subagent: Ampere; human: pending review]`)
+
+### Refactor / Review phase
+
+**Specification Compliance Review**:
+- Reviewer: Averroes (`019f63f5-e5da-7cc0-b05b-905c9be5a352`)
+- Result: no Critical findings.
+- Major findings:
+  - T29 cannot be accepted as complete until external CI evidence exists.
+  - `REFLECTION.md` is absent and must remain human/student-owned.
+  - NJU/GitLab submission and GitLab `unit-test` pass evidence are missing.
+  - T29 deviated from PLAN's no-new-tests note; this log records why.
+- Minor: R035 status needed docs update and remote Docker build job pass must be distinguished from local config evidence.
+
+**Code Quality Review**:
+- Reviewer: Franklin (`019f63f5-fa3f-7972-959e-967315f0c537`)
+- Result: no Critical findings.
+- Major findings:
+  - T29/R035/R059/R063 docs needed status updates.
+  - The exact `make` acceptance command cannot be claimed locally because `make` is unavailable in PowerShell; `$PY` equivalents passed.
+- Minor finding:
+  - Direct mypy on `tests/unit/test_github_actions_ci.py` failed due YAML key typing.
+
+**Review fixes**:
+- Adjusted `tests/unit/test_github_actions_ci.py` typing to allow YAML's possible non-string keys and cast triggers explicitly.
+
+**Verification after review fix**:
+- `& $PY -m pytest tests/unit/test_github_actions_ci.py -v` -> 6 passed.
+- `& $PY -m mypy tests/unit/test_github_actions_ci.py` -> Success, no issues found.
+- `& $PY -m ruff check tests/unit/test_github_actions_ci.py` -> All checks passed.
+
+**Commit**: `ff7f3a7` (`refactor(T29): complete final acceptance reviews [subagent: Averroes/Franklin; human: pending review]`)
+
+### Local acceptance evidence
+
+| Check | Command | Result |
+|---|---|---|
+| Full tests | `& $PY -m pytest tests/ -q` | 828 passed, 5 skipped, 1 warning |
+| Ruff | `& $PY -m ruff check harness/ webui/ demo/ tests/` | All checks passed |
+| Mypy | `& $PY -m mypy harness/ webui/ demo/` | Success, no issues in 32 source files; existing unused `tests.*` override note |
+| Demo | `& $PY -m demo.run_demo` | `governance_interception: HITL_DENIED`; `feedback_correction: PASS`; `stuck_detection: STUCK` |
+| Dependency check | `& $PY -m pip check` | No broken requirements found |
+| Diff check | `git diff --check` | no whitespace errors |
+| Render URL | PowerShell `Invoke-WebRequest` | `2026-07-15T04:02:42Z`: root, `/static/style.css`, and `/static/app.js` all HTTP 200; root contained WebUI markers; no credential pattern match |
+| GitHub CI | GitHub connector | PR #34 merged; run `29387362909` had six test/ruff/mypy jobs success on Windows/Ubuntu for head `1c2c1cb`; T29 Docker build job requires this branch to be pushed before remote pass evidence exists |
+| Credential scan | `rg` current tree and `git log --all -p` high-confidence patterns | only existing explicit fake key fixture/log references (`sk-fake-test-key-not-real`); no real credentials found |
+
+**Blocked external/student evidence**:
+- `REFLECTION.md` does not exist and must be written by the student, not Codex.
+- No NJU/GitLab remote is configured; only GitHub `origin` exists.
+- GitLab `unit-test` pass cannot be verified without the NJU/GitLab URL or CI evidence.
+- The new T29 `docker-build` GitHub Actions job has local config/test evidence but cannot have remote pass evidence until the branch is pushed and CI runs.
+- R061 handwritten-code annotation status requires human/student authorship confirmation.
+
+**Human intervention**:
+- User asked to continue after T28; no T30 or unrelated task was started.
+- User's fixed Python requirement remained active; all Python commands used `$PY`.
+- No push, merge, force-push, real credentials, GitHub PAT, Render token, or NJU/GitLab credential was requested.
+
+### Final continuation after student reflection
+
+**Timestamp**: 2026-07-15
+**Human update**:
+- User stated `REFLECTION.md` has been completed.
+- User stated R061 should be `N/A`.
+- User confirmed no code is declared as independently student-handwritten; Codex must not fabricate authorship comments. Complied.
+
+**Scope guard**:
+- Continued only T29 final acceptance.
+- Did not start T30 or any new feature.
+- Did not call a real LLM and did not request, print, store, or commit any API key/token/password.
+
+**Python environment confirmation**:
+- Command:
+  - `$PY = (Resolve-Path ".\.venv\Scripts\python.exe").Path`
+  - `& $PY -c "import sys; print(sys.executable); print(sys.version)"`
+- Result: fixed project venv interpreter under `.venv\Scripts\python.exe`, Python `3.11.15`.
+
+**Code/config updates in this continuation**:
+- Limited Python support metadata to the actually verified runtime: `requires-python = ">=3.11,<3.12"`.
+- Added repeatable cross-platform fresh-install smoke script `tests/smoke/fresh_install_smoke.py`.
+- Extended `.github/workflows/ci.yml`:
+  - Docker job now builds with `load: true`, does not publish (`push: false`), starts the image, and curls `/`, `/static/style.css`, and `/static/app.js`.
+  - Package job builds distributions, runs `twine check`, and uploads distribution artifacts.
+- Extended README source-install and wheel-install documentation, including the real Render URL and the distinction between mock/demo smoke checks with no API key vs real `harness run` requiring a user-provided DeepSeek key via `harness key setup`.
+
+**Target verification before final docs**:
+- `& $PY -m pytest tests/unit/test_github_actions_ci.py tests/unit/test_distribution.py tests/unit/test_readme.py -v` -> 15 passed.
+- `& $PY -m ruff check tests/unit/test_github_actions_ci.py tests/unit/test_distribution.py tests/unit/test_readme.py tests/smoke/fresh_install_smoke.py` -> All checks passed.
+- `& $PY -m mypy tests/smoke/fresh_install_smoke.py` -> Success, no issues found in 1 source file.
+
+**Full local verification**:
+- `& $PY -m pip install -e .` -> success after approved network access for build dependency installation.
+- `& $PY -m pip check` -> No broken requirements found.
+- `& $PY -m pytest tests/ -q` -> 829 passed, 5 skipped, 1 warning.
+- `& $PY -m ruff check harness/ webui/ demo/ tests/` -> All checks passed.
+- `& $PY -m mypy harness/ webui/ demo/` -> Success, no issues in 32 source files; existing unused `tests.*` override note.
+- `& $PY -m demo.run_demo` -> `governance_interception: HITL_DENIED`; `feedback_correction: PASS`; `stuck_detection: STUCK`.
+
+**Packaging evidence**:
+- `& $PY -m build` with approved network/build access completed and created `coding_agent_harness-0.1.0.tar.gz` and `coding_agent_harness-0.1.0-py3-none-any.whl`.
+- Windows permission note: the elevated build produced `dist/*` artifacts that the normal sandbox process could not read (`PermissionError: [Errno 13] Permission denied`), so `& $PY -m twine check dist/*` was blocked by local Windows file ACL state rather than package metadata.
+- Supplemental readable wheel evidence:
+  - Built a readable wheel into `%TEMP%\coding-agent-harness-t29-pip-wheel` using `& $PY -m pip wheel --no-build-isolation --no-deps . -w <temp>`.
+  - `& $PY -m twine check <temp wheel>` -> PASSED.
+
+**Fresh install evidence**:
+- Command: `& $PY -m tests.smoke.fresh_install_smoke --wheel <temp wheel>`.
+- First sandbox run failed because fresh venv dependency install needed PyPI access for `httpx`; this was an expected sandbox network limitation.
+- Re-ran with approved network access.
+- Result:
+  - fresh repo-outside venv installed the wheel non-editably.
+  - imports for `harness`, `webui`, and `demo` passed.
+  - `harness --help` passed.
+  - `python -m demo.run_demo` passed.
+  - fresh venv `pip check` passed.
+  - installed WebUI started on `127.0.0.1:8765`.
+  - `GET /` -> 200, length 1708.
+  - `GET /static/style.css` -> 200, length 1568.
+  - `GET /static/app.js` -> 200, length 6716.
+
+**Reflection metadata-only check**:
+- `REFLECTION.md` exists.
+- Metadata-only counts: 8725 chars, 7589 non-whitespace chars, 4765 CJK chars.
+- AI-assistance/disclosure marker regex matched.
+- Codex did not print, summarize, rewrite, or otherwise modify the reflection body.
+
+**Live Render recheck**:
+- URL: `https://coding-agent-harness-zq0k.onrender.com/`.
+- First recheck at `2026-07-15T08:37:01Z`:
+  - root `/` timed out at 30 seconds.
+  - `/static/style.css` -> 200, `text/css; charset=utf-8`, length 1453, no credential-pattern match.
+  - `/static/app.js` -> 200, `application/javascript`, length 6538, no credential-pattern match.
+- Root-only retry at `2026-07-15T08:38:10Z`:
+  - `/` -> 200, `text/html; charset=utf-8`, length 1647.
+  - root contained `Coding Agent Harness`.
+  - no credential-pattern match.
+
+**Credential scans**:
+- Current tree high-confidence scan:
+  - Command: `rg -n "(sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|ghp_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,})" .`
+  - Result: only existing explicit fake key fixture/log references (`sk-fake-test-key-not-real`), no real credentials.
+- Full Git history high-confidence scan:
+  - Command: `git log --all -p | rg -n "(sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|ghp_[A-Za-z0-9_]{20,}|xox[baprs]-[A-Za-z0-9-]{10,})"`
+  - Result: only existing explicit fake key fixture/log references, no real credentials.
+- Readable wheel artifact scan:
+  - Result: `artifact_secret_match=False`.
+
+**Remaining external deferred items**:
+- R035/R059: latest pushed GitHub Actions pass for the new T29 `docker-build` and `package` jobs requires human push/PR.
+- R059: GitLab `unit-test` pass remains unavailable without NJU/GitLab URL/evidence.
+- R060: DEFERRED - NJU Git submission URL has not been provided.
+- R061: N/A per user confirmation; no fake authorship comments added.
+
+**Lessons**:
+1. On Windows, build artifacts produced in an elevated context can become unreadable to the normal sandbox; record that as environment evidence rather than pretending `dist/*` passed locally.
+2. Fresh-install validation needs real dependency resolution unless a dependency wheelhouse is supplied; sandbox network failures should be separated from package correctness.
+3. Final acceptance should distinguish product readiness from human-owned submission evidence such as NJU URLs, PR creation, and latest remote CI runs.
+
+### Merge-blocking CI fix addendum
+
+**Timestamp**: 2026-07-15
+**Trigger**: User reported merge failure with GitHub Actions `Verify Docker WebUI` failing.
+
+**Remote evidence**:
+- Workflow run: `29403993688`.
+- Failed job: `Docker image build`, job id `87314937754`.
+- Other jobs in the run completed successfully.
+- Failure step: `Verify Docker WebUI`.
+- Log excerpt: `curl: (56) Recv failure: Connection reset by peer`.
+- Timing evidence: `docker run` completed at `2026-07-15T09:19:12Z`; the first curl began in the same second, about 0.28 seconds later.
+
+**Root cause**:
+- The workflow started the container in detached mode and immediately made one curl attempt per URL.
+- The `curl --retry` flags did not retry this `Recv failure` condition, so a transient startup/reset during WebUI boot failed the merge check before the service had a readiness window.
+
+**Fix**:
+- Added an explicit readiness loop for `/`, `/static/style.css`, and `/static/app.js`.
+- The loop waits up to 30 attempts with 2 seconds between attempts.
+- Added diagnostic output on retry/failure: `docker ps -a`, `docker logs --tail 50`, final `docker inspect`, and full logs.
+- No Docker publish, token, API key, real LLM call, or Render account change was added.
+
+**Local verification**:
+- Red check after test update: `& $PY -m pytest tests/unit/test_github_actions_ci.py -v` -> 1 failed, 6 passed; failure proved the workflow still had direct curl calls and no readiness loop.
+- Green check after workflow update: `& $PY -m pytest tests/unit/test_github_actions_ci.py -v` -> 7 passed.
+- `& $PY -m ruff check tests/unit/test_github_actions_ci.py` -> All checks passed.

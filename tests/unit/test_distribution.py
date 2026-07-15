@@ -22,7 +22,7 @@ def test_pyproject_declares_build_backend_console_script_and_packages() -> None:
 
     assert pyproject["build-system"]["build-backend"] == "setuptools.build_meta"
     assert "setuptools>=68" in pyproject["build-system"]["requires"]
-    assert pyproject["project"]["requires-python"] == ">=3.11"
+    assert pyproject["project"]["requires-python"] == ">=3.11,<3.12"
     assert pyproject["project"]["scripts"]["harness"] == "harness.cli:main"
 
     package_includes = set(pyproject["tool"]["setuptools"]["packages"]["find"]["include"])

@@ -15,23 +15,39 @@ repository and covered by deterministic tests with mock or stub LLMs.
 
 ## 安装
 
-Python package install, after the package is available from an index:
+The currently verified Python runtime is Python 3.11. The package metadata and CI
+intentionally limit formal support to Python 3.11 until newer versions are tested.
+
+Python package install, after the package is available from an index. Current project
+state: the package has not been published to PyPI, so use the source or wheel paths
+below for verified installation:
 
 ```powershell
 pip install coding-agent-harness
 ```
 
-Local checkout install for development or release verification:
+Path A: install from a GitHub source checkout on Windows PowerShell:
 
 ```powershell
-python -m pip install -e .
-python -m pip check
+git clone https://github.com/wyksy123-lang/coding-agent-harness.git
+cd coding-agent-harness
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e .
+.\.venv\Scripts\python.exe -m pip check
+.\.venv\Scripts\harness.exe --help
+.\.venv\Scripts\python.exe -m demo.run_demo
 ```
 
-Docker image install, after an image has been published to your registry:
+Path A: install from a GitHub source checkout on Linux or macOS:
 
-```powershell
-docker pull <registry>/coding-agent-harness
+```bash
+git clone https://github.com/wyksy123-lang/coding-agent-harness.git
+cd coding-agent-harness
+python3.11 -m venv .venv
+./.venv/bin/python -m pip install -e .
+./.venv/bin/python -m pip check
+./.venv/bin/harness --help
+./.venv/bin/python -m demo.run_demo
 ```
 
 For a source checkout, install the release tooling before building local artifacts:
@@ -47,7 +63,23 @@ python -m build
 python -m twine check dist/*
 ```
 
-Python 3.11 or newer is required. The packaged console script is `harness`.
+Path B: install a built wheel into a fresh Python 3.11 environment:
+
+```bash
+python3.11 -m venv .venv
+python -m pip install <wheel>
+harness --help
+python -m demo.run_demo
+```
+
+Docker image install, after an image has been published to your registry. Current project
+state: no public Docker image has been published yet:
+
+```powershell
+docker pull <registry>/coding-agent-harness
+```
+
+The packaged console script is `harness`.
 
 ## 运行
 
@@ -65,6 +97,11 @@ harness key status
 harness key update
 harness key clear
 ```
+
+Installation, package checks, the mock mechanism demo, and the WebUI smoke checks do not
+need an API key. A real `harness run` that calls DeepSeek does require the user to
+configure their own valid key with `harness key setup`. Do not put API keys in the
+repository, command-line arguments, Docker image layers, or shell history.
 
 Run the harness against a natural-language requirement:
 

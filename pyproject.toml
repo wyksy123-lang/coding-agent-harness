@@ -7,7 +7,7 @@ name = "coding-agent-harness"
 version = "0.1.0"
 description = "TDD-focused Coding Agent Harness"
 readme = {text = "TDD-focused Coding Agent Harness.", content-type = "text/markdown"}
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.12"
 dependencies = [
     "httpx",
     "pyyaml",

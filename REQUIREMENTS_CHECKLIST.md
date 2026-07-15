@@ -16,40 +16,40 @@
 | ID | 来源 | 义务 | 计划证据 | 验证方法 | 状态 | PLAN Task |
 |---|---|---|---|---|---|---|
 | R001 | 要求1 §4 前言 | SPEC + PLAN 完成并通过冷启动验证前，禁止编写任何实现代码 | SPEC_PROCESS.md 记录批准时间线 | git log 首次实现 commit 在 SPEC/PLAN/cold-start 之后 | DONE（首次实现 commit 68bd926 在 Gate C 之后） | T01 |
-| R002 | 要求1 §3.6 | 必须使用 Superpowers 框架 + 支持的编码智能体 | .opencode 配置 + AGENT_LOG.md | 检查 Superpowers 安装证据 | TODO | — |
-| R003 | 要求1 §3.6 | 必须如实遵循七步工作流，偏离须在 AGENT_LOG.md 记录并解释 | AGENT_LOG.md | 审查偏离记录 | TODO | — |
-| R004 | 要求1 §4.1 | brainstorming 主动追问"你想做什么"，分块呈现设计供签字确认 | SPEC_PROCESS.md | 审查含分块确认记录 | TODO | — |
-| R005 | 要求1 §4.4 | 至少 3 轮关键迭代的对话节选与处理决策 | SPEC_PROCESS.md | 审查含 ≥3 轮迭代 | TODO | — |
+| R002 | 要求1 §3.6 | 必须使用 Superpowers 框架 + 支持的编码智能体 | .opencode 配置 + AGENT_LOG.md | 检查 Superpowers 安装证据 | DONE（AGENT_LOG records Superpowers skill use across implementation; T29 used `using-superpowers`, `using-git-worktrees`, `test-driven-development`, `systematic-debugging`, and `verification-before-completion` in Codex） | T01-T29 |
+| R003 | 要求1 §3.6 | 必须如实遵循七步工作流，偏离须在 AGENT_LOG.md 记录并解释 | AGENT_LOG.md | 审查偏离记录 | DONE（AGENT_LOG records real deviations, including T29 using `$PY` equivalents because `make` is unavailable on Windows and adding a Red test despite PLAN T29 N/A to fix R035） | T01-T29 |
+| R004 | 要求1 §4.1 | brainstorming 主动追问"你想做什么"，分块呈现设计供签字确认 | SPEC_PROCESS.md | 审查含分块确认记录 | DONE（SPEC_PROCESS.md records 12 brainstorming rounds and user decisions） | — |
+| R005 | 要求1 §4.4 | 至少 3 轮关键迭代的对话节选与处理决策 | SPEC_PROCESS.md | 审查含 ≥3 轮迭代 | DONE（SPEC_PROCESS.md records 12 key iterations, accepted/rejected decisions, and reflection notes） | — |
 | R006 | 要求1 §4.5 | 冷启动验证：换一个不同类型 agent，新 session，仅给 SPEC+PLAN，选 1-2 task，遇不确定暂停询问 | SPEC_PROCESS.md 冷启动记录 | 审查第二个 agent 暂停点与 spec 缺陷 | DONE（Aider 冷启动完成，Gate C 通过） | — |
 | R007 | 要求1 §4.5 | 冷启动记录：暂停点、spec 缺陷、误读、产出差距、SPEC/PLAN 修订 diff | SPEC_PROCESS.md | 审查 before/after diff | DONE（6 个暂停点已记录，5 个缺陷已修复，修订后人工重新批准） | — |
-| R008 | 要求1 §4.6 | git worktree 隔离：每个独立功能/大模块一个 worktree，对应一个 PR | git worktree list + PR 链接 | 审查 worktree 与 PR 一一对应 | IN PROGRESS（T01-T21 均在独立/managed task branch 中完成；T21 branch=`codex/task/T21-webui-frontend`） | T01-T29 |
-| R009 | 要求1 §4.6 | 每个任务派一个新鲜 subagent 完成 | AGENT_LOG.md | 审查每 task 有独立 subagent 记录 | IN PROGRESS（T01-T21 均记录 fresh subagent/reviewer；T21 prep=Archimedes，Spec Review=Hypatia/Pasteur/Boyle，Quality Review=Dewey） | T01-T29 |
-| R010 | 要求1 §4.6 + §3.6 | TDD 强制：红→绿→重构；先写失败测试、得到红色，再写最少代码变绿，再重构。不接受先写实现再补测试 | AGENT_LOG.md + commit 历史 | 审查 commit 顺序：test commit 在 impl commit 之前 | IN PROGRESS（T01-T21 均保持 Red→Green→Review/Refactor；T21: Red 3d17135 → Green 7bd7117 → Review eeefe16） | T01-T29 |
-| R011 | 要求1 §4.6 | 两阶段评审：先 spec 合规检查 → 再代码质量检查；Critical issue 必须修复才能进入下一 task | AGENT_LOG.md | 审查每 task 有两阶段评审记录 | IN PROGRESS（T01-T21 均记录两阶段评审；T21 Spec Review 1 Critical/2 Major 已修复；Quality Review 0 Critical/4 Major 已修复或记录） | T01-T29 |
-| R012 | 要求1 §4.6 | finishing-a-development-branch 决定 merge/PR/保留/丢弃 | AGENT_LOG.md | 审查分支完成决策记录 | TODO | — |
+| R008 | 要求1 §4.6 | git worktree 隔离：每个独立功能/大模块一个 worktree，对应一个 PR | git worktree list + PR 链接 | 审查 worktree 与 PR 一一对应 | DEFERRED（T01-T28 completed on task branches/PRs; T29 branch `codex/task/T29-final-acceptance` exists and must be pushed/opened as a PR by the human after final review） | T01-T29 |
+| R009 | 要求1 §4.6 | 每个任务派一个新鲜 subagent 完成 | AGENT_LOG.md | 审查每 task 有独立 subagent 记录 | DONE（T01-T29 record fresh prep/reviewer agents; T29 prep=Ampere, Spec Review=Averroes, Quality Review=Franklin） | T01-T29 |
+| R010 | 要求1 §4.6 + §3.6 | TDD 强制：红→绿→重构；先写失败测试、得到红色，再写最少代码变绿，再重构。不接受先写实现再补测试 | AGENT_LOG.md + commit 历史 | 审查 commit 顺序：test commit 在 impl commit 之前 | DONE（Task commits preserve Red→Green→Review evidence; T29 documents its N/A exception plus the R035 Red test `048fa29` before Green `1a862b6`） | T01-T29 |
+| R011 | 要求1 §4.6 | 两阶段评审：先 spec 合规检查 → 再代码质量检查；Critical issue 必须修复才能进入下一 task | AGENT_LOG.md | 审查每 task 有两阶段评审记录 | DONE（T01-T29 include spec and quality reviews; T29 reviewers Averroes/Franklin reported no Critical findings） | T01-T29 |
+| R012 | 要求1 §4.6 | finishing-a-development-branch 决定 merge/PR/保留/丢弃 | AGENT_LOG.md | 审查分支完成决策记录 | DEFERRED（T29 final response provides the manual push command and PR title/body; merge/PR completion is human-owned because Codex must stop before push） | T29 |
 
 ## B. 交付文档
 
 | ID | 来源 | 义务 | 计划证据 | 验证方法 | 状态 | PLAN Task |
 |---|---|---|---|---|---|---|
-| R013 | 要求1 §4.2 | SPEC.md 含 10 节：问题陈述、≥5 INVEST 用户故事、功能规约（输入/行为/输出/边界/错误）、非功能（性能/安全含凭据威胁模型/可用性/可观测性）、系统架构、数据模型、凭据与分发设计、技术选型理由、验收标准、风险与未决 | SPEC.md | 逐节检查存在性与内容完整性 | TODO（SPEC 已创建，待用户审查） | — |
-| R014 | 要求2 A.5 | SPEC 额外「领域与机制设计」节：coding 的反馈信号、危险动作、所需工具、记忆需求；重点维度及理由；机制如何编码 | SPEC.md §9 | 检查该节存在且覆盖四类机制 | TODO（SPEC 已创建，待用户审查） | — |
-| R015 | 要求1 §4.2 | 每个功能有客观验收标准 | SPEC.md §10 | 检查每功能有可判定标准 | TODO（SPEC 已创建，待用户审查） | — |
+| R013 | 要求1 §4.2 | SPEC.md 含 10 节：问题陈述、≥5 INVEST 用户故事、功能规约（输入/行为/输出/边界/错误）、非功能（性能/安全含凭据威胁模型/可用性/可观测性）、系统架构、数据模型、凭据与分发设计、技术选型理由、验收标准、风险与未决 | SPEC.md | 逐节检查存在性与内容完整性 | DONE（SPEC.md has approved sections §1-§11 plus appendices and threat model） | — |
+| R014 | 要求2 A.5 | SPEC 额外「领域与机制设计」节：coding 的反馈信号、危险动作、所需工具、记忆需求；重点维度及理由；机制如何编码 | SPEC.md §9 | 检查该节存在且覆盖四类机制 | DONE（SPEC.md §9 covers feedback signals, dangerous actions, tools, memory, focus dimension, and code mechanisms） | — |
+| R015 | 要求1 §4.2 | 每个功能有客观验收标准 | SPEC.md §10 | 检查每功能有可判定标准 | DONE（SPEC.md §10 defines AC1-AC25 objective acceptance criteria） | — |
 | R016 | 要求1 §4.3 | PLAN.md：每 task 可由一个 subagent 一次会话完成；含目标、涉及文件、实现要点、验证步骤（含将要写的失败测试） | PLAN.md | 审查 task 粒度与字段完整性 | DONE（T01 已验证可由 subagent 完成） | T01 |
 | R017 | 要求1 §4.3 | PLAN 显式标出 task 间依赖与可并行部分 | PLAN.md | 检查依赖标注 | DONE（依赖图 + 并行计划已存在） | — |
-| R018 | 要求1 §4.7 | PLAN.md 持续更新：每完成一个 task 即标记完成并附 commit hash | PLAN.md + git log | 审查 task 状态与 commit hash | IN PROGRESS（T01-T21 已标记 ✅ DONE + commit hash） | T01-T29 |
-| R019 | 要求1 §4.4 | SPEC_PROCESS.md：brainstorming 关键节点、≥3 轮迭代、AI 建议采纳/推翻及理由、brainstorming 反思 | SPEC_PROCESS.md | 逐项检查 | TODO | — |
-| R020 | 要求1 §4.9 | AGENT_LOG.md：时间顺序，每条含时间戳、task 编号、Superpowers 技能、关键 prompt/context、subagent 输出/commit hash、人工干预、教训 | AGENT_LOG.md | 逐条检查字段完整性 | TODO | — |
+| R018 | 要求1 §4.7 | PLAN.md 持续更新：每完成一个 task 即标记完成并附 commit hash | PLAN.md + git log | 审查 task 状态与 commit hash | DONE（T01-T28 marked complete; T29 updated with final local/fresh-install/Render evidence and explicit DEFERRED external submission/CI items） | T01-T29 |
+| R019 | 要求1 §4.4 | SPEC_PROCESS.md：brainstorming 关键节点、≥3 轮迭代、AI 建议采纳/推翻及理由、brainstorming 反思 | SPEC_PROCESS.md | 逐项检查 | DONE（SPEC_PROCESS.md records key brainstorming nodes, 12 iterations, decisions, and reflection notes） | — |
+| R020 | 要求1 §4.9 | AGENT_LOG.md：时间顺序，每条含时间戳、task 编号、Superpowers 技能、关键 prompt/context、subagent 输出/commit hash、人工干预、教训 | AGENT_LOG.md | 逐条检查字段完整性 | DONE（AGENT_LOG.md records T01-T29 through LOG-058, including T29 local/fresh-install/Render evidence and explicit external DEFERRED items） | T01-T29 |
 | R021 | 要求1 §五.4 | README.md 含：项目简介、安装、运行、分发命令、目录结构、安全边界说明 | README.md | 逐节检查 | DONE（T27: README includes required sections; `tests/unit/test_readme.py` and reviewer checks passed） | T27 |
-| R022 | 要求1 §五.8 | REFLECTION.md：1500–2500 字反思报告 | REFLECTION.md | 字数与内容检查 | TODO | — |
-| R023 | 要求1 §六 | REFLECTION 必须学生本人撰写，禁止 AI 代写（可 AI 辅助润色但需标注） | REFLECTION.md 内标注 | 审查 AI 辅助标注 | TODO | — |
+| R022 | 要求1 §五.8 | REFLECTION.md：1500–2500 字反思报告 | REFLECTION.md | 字数与内容检查 | DONE（student provided `REFLECTION.md`; Codex performed metadata-only check without printing/modifying body: 8725 chars, 7589 non-whitespace chars, 4765 CJK chars） | T29 |
+| R023 | 要求1 §六 | REFLECTION 必须学生本人撰写，禁止 AI 代写（可 AI 辅助润色但需标注） | REFLECTION.md 内标注 | 审查 AI 辅助标注 | DONE（student stated reflection is complete; metadata-only regex found an AI-assistance/disclosure marker; Codex did not read aloud, rewrite, or fabricate content） | T29 |
 
 ## C. 凭据安全
 
 | ID | 来源 | 义务 | 计划证据 | 验证方法 | 状态 | PLAN Task |
 |---|---|---|---|---|---|---|
 | R024 | 要求1 §3.1 | key 绝不硬编码进源码 | 源码扫描 | grep/secret scan | DONE（T17 touched-file 高置信扫描无匹配；全仓仅既有 fake key 占位符） | T17 |
-| R025 | 要求1 §3.1 | key 绝不提交进 Git（含历史） | git log 扫描 | git log -p 全历史扫描 | IN PROGRESS（T17 未新增真实 key；最终全历史扫描留待收尾） | T17 |
+| R025 | 要求1 §3.1 | key 绝不提交进 Git（含历史） | git log 扫描 | git log -p 全历史扫描 | DONE（T29 full-history high-confidence scan found only the explicit fake key fixture/log references, no real credentials） | T17,T29 |
 | R026 | 要求1 §3.1 | key 绝不写入日志/终端 history/明文配置文件 | 代码审查 | 检查无明文 key 输出 | DONE（T17 status/log tests 验证明文 key 不出现在状态或 warning 日志） | T17 |
 | R027 | 要求1 §3.1 | 至少实现一种安全存储：OS 钥匙串/KMS/带主密码加密文件 | 源码实现 | 单测验证存储机制 | DONE（T17 CredentialManager 默认使用 OS keyring，单测用 mock backend 验证） | T17 |
 | R028 | 要求1 §3.1 | 环境变量通过 .env 加载而非命令行 export；须说明明文风险 | SPEC + README | 审查说明 | DONE（T17 implements keyring + `.env` fallback; T27 README documents plaintext `.env` risk and avoids command-line env key examples） | T17,T27 |
@@ -64,7 +64,7 @@
 | R032 | 要求1 §3.2 | 选容器/二进制/包管理器一种或多种分发 | Dockerfile + PyPI 打包配置 | 检查分发产物存在 | DONE (T26: Dockerfile, PyPI wheel/sdist, console script, and WebUI static package data complete; Docker runtime verification blocked because `docker` is unavailable in current environment) | T26 |
 | R033 | 要求1 §3.2 | README 写清：获取方式、运行命令、key 在目标机安全配置、已知限制 | README.md | 逐项检查 | DONE（T27 README documents package/image acquisition, run commands, `harness key` setup/status/update/clear, and known limitations without claiming publication/deployment） | T27 |
 | R034 | 要求1 §3.4 | 凭据与分发经得起"全新机器从零运行"检验 | 安装文档 + 测试记录 | fresh-machine 测试 | DONE (T26: built wheel installed into fresh Python 3.11 venv from outside repo; imports, `harness --help`, demo, installed WebUI HTTP 200, and `pip check` passed. T27: README now documents install/run/key setup and notes Docker runtime prerequisites; Docker runtime verification remained unavailable in the local T26 environment.) | T26,T27 |
-| R035 | 要求1 §4.8 | 若选容器分发，CI 须构建镜像 | CI 配置 | 审查 CI build step | TODO | — |
+| R035 | 要求1 §4.8 | 若选容器分发，CI 须构建镜像 | CI 配置 | 审查 CI build step | DEFERRED（T29 added `.github/workflows/ci.yml` `docker-build` job using `docker/build-push-action@v6`, `load: true`, `push: false`, then starts the image and curls `/`, `/static/style.css`, and `/static/app.js`; remote job pass evidence requires branch push/PR） | T29 |
 | R036 | 要求1 §4.11 | 可选云部署：提供截止前可访问公网地址；README 说明部署架构与 CI/CD；控制成本 | 部署 URL + README | 访问 URL 验证 | DONE（T28 live Render deployment verified：`https://coding-agent-harness-zq0k.onrender.com/` 在 2026-07-15T03:05:17Z 和 2026-07-15T03:15:02Z 返回 HTTP 200；`render.yaml` 定义 Render free Docker Web Service；README 记录部署架构、CI/CD、免费层休眠和公网 URL；未写入真实 API key/token/password） | T28 |
 | R037 | 要求1 §五.9 | 线上部署 URL，必须提供应用可访问的 WebUI 接口 | 部署 URL | 访问验证 | DONE（T28 live WebUI verified：`GET /` 返回 200 且包含 `Coding Agent Harness`、`HITL`、`/static/style.css`、`/static/app.js`；`GET /static/style.css` 和 `GET /static/app.js` 均返回 200；credential pattern scan negative for checked bodies） | T28 |
 
@@ -74,22 +74,22 @@
 |---|---|---|---|---|---|---|
 | R038 | 要求2 A.4-A | 必须自己实现 agent 主循环（组织上下文→调用 LLM→解析动作→分发执行→回灌结果→停机判断） | 源码 | 代码审查 + 单测 | DONE（T18 AgentLoop 自实现，覆盖 LLM→工具→反馈→停机） | T18 |
 | R039 | 要求2 A.4-A | 必须有可注入 mock 的 LLM 抽象层（可替换 mock 离线测试，也可接真实供应商） | 源码 | mock-LLM 单测通过 | DONE（T03 LLMClient ABC + T04 MockLLMClient + T05 DeepSeekClient 均已实现） | T03-T05 |
-| R040 | 要求2 A.4-A | 允许使用底层零件（LLM 供应商单次对话 API、HTTP 库、向量库、解析库） | SPEC 说明 | 审查选型 | TODO | — |
-| R041 | 要求2 A.4-A | 不允许建在现成 agent 编排框架高层循环之上（LangChain AgentExecutor、AutoGen、CrewAI、LlamaIndex agent、编码智能体 SDK agent runner） | 源码 + SPEC | 依赖审查无禁止框架 | TODO | — |
+| R040 | 要求2 A.4-A | 允许使用底层零件（LLM 供应商单次对话 API、HTTP 库、向量库、解析库） | SPEC 说明 | 审查选型 | DONE（SPEC §5.3 lists only lower-level libraries; dependency scan shows no high-level agent runner dependency） | T29 |
+| R041 | 要求2 A.4-A | 不允许建在现成 agent 编排框架高层循环之上（LangChain AgentExecutor、AutoGen、CrewAI、LlamaIndex agent、编码智能体 SDK agent runner） | 源码 + SPEC | 依赖审查无禁止框架 | DONE（`rg` for LangChain/AgentExecutor/AutoGen/CrewAI/LlamaIndex found only requirement/spec mentions, no runtime dependency or implementation use） | T29 |
 | R042 | 要求2 A.4-B | 反馈信号 = 代码校验器/传感器（解析产物→客观判定→回灌），不是提示词 | 源码 | 单测验证确定性 | DONE（T12 TestResultParser、T13 FailureClassifier、T15 FeedbackInjector、T16 RoundTracker 均已完成） | T12-T16 |
 | R043 | 要求2 A.4-B | 危险动作拦截 = 代码护栏（识别→拦截→要求人工确认），不是提示词 | 源码 | 单测验证确定性 | DONE（T09 PathGuard + T10 CommandGuard + T11 HITLState 均已实现） | T09-T11 |
 | R044 | 要求2 A.4-C | 每个核心机制（工具分发、治理拦截、反馈回灌、记忆读写、停机）替换 mock LLM 后仍能用确定性单测验证 | mock-LLM 单测 | 离线运行测试通过 | DONE（T18 用 SequencedLLM/stub tools 离线覆盖 AgentLoop；T22 用 MockLLMClient 集成测试覆盖 TDD 工具分发、治理 HITL PENDING、反馈修正、记忆检索、PASS/MAX_ROUNDS/STUCK 停机） | T18,T22 |
-| R045 | 要求2 A.4-C | 配置文件/规则文件/技能/提示词文件属"内容物"，不计入 harness 实现 | SPEC 说明 | 审查不以此充数 | TODO | — |
+| R045 | 要求2 A.4-C | 配置文件/规则文件/技能/提示词文件属"内容物"，不计入 harness 实现 | SPEC 说明 | 审查不以此充数 | DONE（SPEC §5.3 and implemented modules show the harness mechanisms are Python code, not config/prompt files counted as implementation） | T29 |
 | R046 | 要求2 A.4-D | 六维度（决策/工具/记忆/治理/反馈/配置）都有可运行的最低实现 | 源码 | 各维度可运行验证 | DONE（决策 T18、工具 T06-T08、治理 T09-T11、配置 T02/T17、反馈 T12-T13/T15-T16、记忆 T14 均有最低可运行实现） | T01-T18 |
 | R047 | 要求2 A.4-D | 选择一个机制密集维度深入实现作为主要贡献 | SPEC + 源码 | 深度审查 | DONE（反馈闭环：T12 TestResultParser + T13 FailureClassifier + T14 MemoryRetriever/Recorder + T15 FeedbackInjector + T16 RoundTracker 已完成） | T12-T16 |
 | R048 | 要求2 A.4-D | 若以记忆为重点，存储与检索必须自己实现，不得直接接用框架 memory | 源码 | 代码审查 | DONE（T14 JSON memory store/retriever/recorder 自实现，未接入框架 memory） | T14 |
-| R049 | 要求2 A.3 | 必须设计四类机制：动作/工具、客观反馈信号、危险动作、记忆 | SPEC「领域与机制设计」 | 逐类检查 | TODO | — |
+| R049 | 要求2 A.3 | 必须设计四类机制：动作/工具、客观反馈信号、危险动作、记忆 | SPEC「领域与机制设计」 | 逐类检查 | DONE（SPEC §9.1-§9.4 and implementation tasks cover actions/tools, objective pytest feedback, dangerous action guards, and JSON memory） | T29 |
 
 ## F. 测试与机制演示
 
 | ID | 来源 | 义务 | 计划证据 | 验证方法 | 状态 | PLAN Task |
 |---|---|---|---|---|---|---|
-| R050 | 要求1 §3.4 | 至少 3 个职责清晰的功能模块 | 源码 + SPEC | 模块审查 | IN PROGRESS（配置/凭据 T02/T17、LLM 抽象 T03-T05、工具 T06-T08、治理 T09-T11、反馈 T12-T16、记忆 T14、AgentLoop T18、CLI T19、WebUI 后端 T20、WebUI 前端 T21 — 已实现 11 个模块） | T01-T21 |
+| R050 | 要求1 §3.4 | 至少 3 个职责清晰的功能模块 | 源码 + SPEC | 模块审查 | DONE（configuration, credentials, LLM abstraction, tools, governance, feedback, memory, agent loop, CLI, WebUI backend, WebUI frontend, distribution, and deployment modules are implemented） | T01-T28 |
 | R051 | 要求1 §3.4 + §4.8 | 可一键运行的测试命令（make test 或等价），覆盖核心功能 | Makefile/等价 | 执行测试命令 | DONE（Makefile `make test` 已创建，150 tests pass） | T01 |
 | R052 | 要求1 §4.8 | CI（GitHub Actions）必须配置：每次 push 自动运行测试 | .github/workflows/ | push 后 CI 自动触发 | DONE | T24: `.github/workflows/ci.yml` triggers push + PR to main; jobs `test`/`lint`/`typecheck` use Windows + Ubuntu matrix, Python 3.11, pip cache, editable install with explicit setuptools package discovery, `python -m pytest tests/ -q`, `python -m ruff check harness/ webui/ demo/ tests/`, and `python -m mypy harness/ webui/ demo/` |
 | R053 | 要求2 A.6 | harness 核心机制必须有用 mock/stub LLM 驱动的确定性单元测试，不依赖网络与真实 LLM | 单测代码 | 离线运行 mock-LLM 测试 | DONE（T22 `tests/mock/test_agent_loop_mock.py` 使用 MockLLMClient/条件式 fake LLM 离线确定性验证主循环核心机制，无网络和真实 LLM） | T18,T22 |
@@ -99,20 +99,20 @@
 
 | ID | 来源 | 义务 | 计划证据 | 验证方法 | 状态 | PLAN Task |
 |---|---|---|---|---|---|---|
-| R055 | 要求1 §4.7 | 公开 GitHub 仓库（私有仓需将助教加为协作者） | GitHub URL | 访问仓库 | TODO | — |
-| R056 | 要求1 §4.7 | 完整 commit 历史与 PR 工作流；拒绝单次 commit 提交全部代码；每个 worktree 对应一个 PR | git log + PR 链接 | 审查 commit/PR 历史 | TODO | — |
-| R057 | 要求1 §4.7 | commit message/PR 描述标注由哪个 subagent 完成、人工修改了哪些 | commit/PR | 审查描述 | TODO | — |
+| R055 | 要求1 §4.7 | 公开 GitHub 仓库（私有仓需将助教加为协作者） | GitHub URL | 访问仓库 | DONE（GitHub repository remote is `https://github.com/wyksy123-lang/coding-agent-harness.git`; GitHub connector confirmed PR #34 metadata） | T29 |
+| R056 | 要求1 §4.7 | 完整 commit 历史与 PR 工作流；拒绝单次 commit 提交全部代码；每个 worktree 对应一个 PR | git log + PR 链接 | 审查 commit/PR 历史 | DEFERRED（Git history shows incremental task commits and PR merges through PR #34; T29 PR evidence requires human push/open PR after this stop-before-push handoff） | T01-T29 |
+| R057 | 要求1 §4.7 | commit message/PR 描述标注由哪个 subagent 完成、人工修改了哪些 | commit/PR | 审查描述 | DEFERRED（T29 commits include subagent/human markers; final PR body is provided in the handoff for human review/use because Codex must not create the PR itself） | T01-T29 |
 | R058 | 要求1 §五.6 | CI 配置（.gitlab-ci.yml），必须包含一个名为 unit-test 的 job | .gitlab-ci.yml | 检查 job 名 | DONE | T25: `.gitlab-ci.yml` includes exact `unit-test` job using `python:3.11`, pip cache, editable install, and `make test` |
-| R059 | 要求1 §五.7 | CI/CD 执行记录，最后一次必须是 pass 状态 | CI 截屏/日志 | 审查 CI 状态 | TODO | — |
-| R060 | 要求1 §五 | 通过同一个 NJU Git 仓库链接提交全部交付物 | NJU Git URL | 访问仓库 | TODO | — |
+| R059 | 要求1 §五.7 | CI/CD 执行记录，最后一次必须是 pass 状态 | CI 截屏/日志 | 审查 CI 状态 | DEFERRED（GitHub PR #34 head run `29387362909` had six test/ruff/mypy jobs success; T29 new `docker-build` and `package` jobs require branch push/PR to obtain latest pass evidence; GitLab `unit-test` pass requires NJU/GitLab URL） | T29 |
+| R060 | 要求1 §五 | 通过同一个 NJU Git 仓库链接提交全部交付物 | NJU Git URL | 访问仓库 | DEFERRED — NJU Git submission URL has not been provided. | T29 |
 
 ## H. 学术规范
 
 | ID | 来源 | 义务 | 计划证据 | 验证方法 | 状态 | PLAN Task |
 |---|---|---|---|---|---|---|
-| R061 | 要求1 §六 | 若有部分代码更适合自己手写（如核心算法），在该文件/函数顶部明确注释 | 源码注释 | 审查注释 | TODO | — |
+| R061 | 要求1 §六 | 若有部分代码更适合自己手写（如核心算法），在该文件/函数顶部明确注释 | 源码注释 | 审查注释 | N/A（user confirmed no code is declared as independently student-handwritten; Codex did not fabricate authorship comments） | T29 |
 | R062 | 要求1 §六 | 使用第三方代码必须遵守其许可证，并在 README 中列出 | README | 审查许可证列表 | DONE（T27 README lists direct dependency licenses and warns to verify installed/transitive metadata before redistribution） | T27 |
-| R063 | 要求1 §五 | 仓库内不得出现任何真实凭据（当前文件 + Git 历史） | 全仓库扫描 | secret scan | TODO | — |
+| R063 | 要求1 §五 | 仓库内不得出现任何真实凭据（当前文件 + Git 历史） | 全仓库扫描 | secret scan | DONE（T29 current-tree and full-history high-confidence scans found only explicit fake key fixture/log references; readable wheel artifact scan found no high-confidence secret pattern; no real credentials found） | T29 |
 
 ---
 

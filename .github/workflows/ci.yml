@@ -106,3 +106,83 @@ jobs:
 
       - name: Run mypy
         run: python -m mypy harness/ webui/ demo/
+
+  docker-build:
+    name: Docker image build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          load: true
+          push: false
+          tags: coding-agent-harness:ci
+
+      - name: Start Docker WebUI
+        run: docker run --rm -d --name coding-agent-harness-ci -p 8000:8000 coding-agent-harness:ci
+
+      - name: Verify Docker WebUI
+        run: |
+          for path in / /static/style.css /static/app.js; do
+            url="http://127.0.0.1:8000${path}"
+            ok=0
+            for attempt in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do
+              if curl --fail --silent --show-error "$url" > /tmp/docker-webui-response; then
+                ok=1
+                break
+              fi
+              echo "Waiting for $url (attempt $attempt/30)"
+              docker ps -a
+              docker logs --tail 50 coding-agent-harness-ci
+              sleep 2
+            done
+            if [ "$ok" -ne 1 ]; then
+              echo "Docker WebUI did not become ready at $url"
+              docker inspect coding-agent-harness-ci
+              docker logs coding-agent-harness-ci
+              exit 1
+            fi
+          done
+
+      - name: Stop Docker WebUI
+        if: always()
+        run: docker stop coding-agent-harness-ci
+
+  package:
+    name: Build package artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install packaging tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build twine
+
+      - name: Build distributions
+        run: python -m build
+
+      - name: Check distributions
+        run: python -m twine check dist/*
+
+      - name: Upload distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-distributions
+          path: dist/*

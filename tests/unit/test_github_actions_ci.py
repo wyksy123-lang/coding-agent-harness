@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import tomllib
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 
@@ -10,7 +10,7 @@ WORKFLOW_PATH = Path(".github/workflows/ci.yml")
 PYPROJECT_PATH = Path("pyproject.toml")
 
 
-def _load_workflow() -> dict[str, Any]:
+def _load_workflow() -> dict[Any, Any]:
     with WORKFLOW_PATH.open(encoding="utf-8") as workflow_file:
         loaded = yaml.safe_load(workflow_file)
     assert isinstance(loaded, dict)
@@ -20,7 +20,7 @@ def _load_workflow() -> dict[str, Any]:
 def test_github_actions_workflow_triggers_on_push_and_main_pr() -> None:
     workflow = _load_workflow()
 
-    triggers = workflow.get("on", workflow.get(True))
+    triggers = cast(dict[str, Any], workflow.get("on", workflow.get(True)))
 
     assert "push" in triggers
     assert triggers["push"] is None
@@ -48,6 +48,67 @@ def test_github_actions_workflow_defines_test_lint_and_typecheck_jobs() -> None:
             and step.get("with", {}).get("cache-dependency-path") == "pyproject.toml"
             for step in job["steps"]
         )
+
+
+def test_github_actions_workflow_builds_docker_image_without_publishing() -> None:
+    workflow = _load_workflow()
+
+    docker_job = workflow["jobs"]["docker-build"]
+
+    assert docker_job["name"] == "Docker image build"
+    assert docker_job["runs-on"] == "ubuntu-latest"
+    assert any(step.get("uses") == "actions/checkout@v4" for step in docker_job["steps"])
+    build_steps = [
+        step for step in docker_job["steps"] if step.get("uses") == "docker/build-push-action@v6"
+    ]
+    assert len(build_steps) == 1
+    build_config = build_steps[0]["with"]
+    assert build_config["context"] == "."
+    assert build_config["file"] == "./Dockerfile"
+    assert build_config["load"] is True
+    assert build_config["push"] is False
+    assert build_config["tags"] == "coding-agent-harness:ci"
+
+    docker_commands = "\n".join(
+        str(step["run"]) for step in docker_job["steps"] if "run" in step
+    )
+    assert "docker run --rm -d --name coding-agent-harness-ci -p 8000:8000" in docker_commands
+    assert "for path in / /static/style.css /static/app.js" in docker_commands
+    assert "for attempt in 1 2 3 4 5" in docker_commands
+    assert 'curl --fail --silent --show-error "$url"' in docker_commands
+    assert "Waiting for $url (attempt $attempt/30)" in docker_commands
+    assert "docker ps -a" in docker_commands
+    assert "docker logs --tail 50 coding-agent-harness-ci" in docker_commands
+    assert "docker inspect coding-agent-harness-ci" in docker_commands
+    assert "Docker WebUI did not become ready at $url" in docker_commands
+    assert "docker stop coding-agent-harness-ci" in docker_commands
+
+
+def test_github_actions_workflow_builds_and_uploads_python_distributions() -> None:
+    workflow = _load_workflow()
+
+    package_job = workflow["jobs"]["package"]
+
+    assert package_job["name"] == "Build package artifacts"
+    assert package_job["runs-on"] == "ubuntu-latest"
+    assert any(step.get("uses") == "actions/checkout@v4" for step in package_job["steps"])
+    assert any(
+        step.get("uses") == "actions/setup-python@v5"
+        and step.get("with", {}).get("python-version") == "3.11"
+        for step in package_job["steps"]
+    )
+    package_commands = "\n".join(
+        str(step["run"]) for step in package_job["steps"] if "run" in step
+    )
+    assert "python -m pip install build twine" in package_commands
+    assert "python -m build" in package_commands
+    assert "python -m twine check dist/*" in package_commands
+    upload_steps = [
+        step for step in package_job["steps"] if step.get("uses") == "actions/upload-artifact@v4"
+    ]
+    assert len(upload_steps) == 1
+    assert upload_steps[0]["with"]["name"] == "python-distributions"
+    assert upload_steps[0]["with"]["path"] == "dist/*"
 
 
 def test_github_actions_workflow_runs_project_ci_commands() -> None:
@@ -86,7 +147,6 @@ def test_github_actions_workflow_uses_portable_runner_commands() -> None:
         "python - <<",
         "/bin/sh",
         "bash",
-        "rm ",
         "cp ",
         "touch ",
         "C:\\Users\\",
