@@ -109,6 +109,18 @@ Run the harness against a natural-language requirement:
 harness run "add a slugify helper with tests"
 ```
 
+Run the same real AgentLoop with the local WebUI attached:
+
+```powershell
+harness run "add a slugify helper with tests" --web
+```
+
+The local WebUI binds only to `http://127.0.0.1:8000/`. It streams the live
+AgentLoop phase, round, test status, event timeline, and recoverable HITL approval
+requests from the same process. This is the recommended review path for a teacher or
+reviewer who pulls the repository locally; no public demo service is required for this
+mode.
+
 Use a non-default configuration path when needed:
 
 ```powershell
@@ -127,7 +139,8 @@ The WebUI backend is served by FastAPI and Uvicorn:
 python -m uvicorn webui.app:app --host 127.0.0.1 --port 8000
 ```
 
-Then open `http://127.0.0.1:8000/`.
+Then open `http://127.0.0.1:8000/`. This direct Uvicorn command serves the WebUI
+shell; use `harness run ... --web` when you want the UI attached to a real harness run.
 
 ## 分发命令
 

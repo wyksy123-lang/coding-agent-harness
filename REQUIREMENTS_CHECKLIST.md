@@ -263,3 +263,11 @@
 | R064 | FIX-WIN-01 | Windows 11 + PowerShell + native Python is the primary supported runtime; Linux and Docker remain compatibility/deployment environments; Windows full pytest/Ruff/mypy must not retain known failed baseline. | PLAN.md FIX-WIN-01; AGENT_LOG.md LOG-048 | `python -m pytest -q`; `python -m ruff check harness webui tests`; `python -m mypy harness webui tests` | DONE (`797 passed, 5 skipped`; Ruff passed; mypy passed) | FIX-WIN-01 |
 
 ---
+
+# T30 WebUI Local Live Integration Addendum
+
+| ID | Source | Obligation | Plan Evidence | Verification Method | Status | PLAN Task |
+|---|---|---|---|---|---|---|
+| R065 | T30 user adjustment | WebUI local review path must attach to the real same-process AgentLoop, stream live state/timeline, and support recoverable HITL decisions without requiring a public demo service. | PLAN.md T30; README.md local `--web` section; AGENT_LOG.md LOG-059 | `harness run "..." --web`; targeted WebUI/AgentLoop/CLI tests; final pytest/Ruff/Mypy/pip check/credential scan | DONE (`852 passed, 5 skipped`; Ruff passed; Mypy passed; pip check passed; credential scans found no real credentials); public demo replay marked out of scope by user on 2026-07-15 | T30 |
+
+---
