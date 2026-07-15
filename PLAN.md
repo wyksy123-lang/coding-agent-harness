@@ -948,7 +948,7 @@ T29 (final acceptance) ← depends on all
 11. **对应 worktree 和 PR 范围**: `feature/readme-deploy` / PR13
 12. **完成状态及 commit hash 记录位置**: 本文件 T28 行；AGENT_LOG.md
 
-**状态**: ⬜ TODO | **Commit**: —
+**Status**: implementation complete, live deployment pending | **Commit**: 655c00b (Red), 129286f (Green), 3865295 (Review)
 
 ---
 

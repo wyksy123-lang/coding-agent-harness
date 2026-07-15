@@ -4206,3 +4206,113 @@
 1. README command examples need their prerequisite tooling documented, especially when tools are not project dependencies.
 2. Documentation tests should guard the accuracy risks reviewers actually identified, not only section presence.
 3. Publication/deployment wording must be explicit when artifacts are buildable locally but not yet published.
+
+---
+
+## LOG-057 - T28 Render deployment configuration
+
+**Timestamp**: 2026-07-15
+**Environment**: Windows Codex checkout, fixed project venv `./.venv/Scripts/python.exe`
+**Worktree**: `C:\Users\裴斐\Documents\coding-agent-harness-codex`
+**Branch**: `codex/task/T28-render-deploy`
+**Base main**: `b066ae9` (`Merge pull request #33 from wyksy123-lang/codex/task/T27-readme`)
+**Task**: T28 - Render deployment
+**Status**: implementation complete, live deployment pending
+
+**Handoff / sync**:
+- User stated T27 was checked and pushed, then narrowed T28 scope to code/config only with live Render deployment pending.
+- Confirmed `main` and `origin/main` at `b066ae9736595c3ee3afcd47291d4e0eb9bcf66d`.
+- Confirmed required Python: `./.venv/Scripts/python.exe`, Python 3.11.15.
+- Created branch `codex/task/T28-render-deploy` from latest `main`.
+- Baseline: `& $PY -m pytest tests/ -q` -> 823 passed, 5 skipped, 1 warning.
+- PLAN live Red/Green command `curl -s -o /dev/null -w "%{http_code}" <URL>` was not executable in this stage because no public Render URL exists; this is recorded as live deployment pending, not passed.
+
+### Red phase
+
+**Subagent**: Pauli (`019f6394-aea7-7b80-b0cb-a770502e3217`)
+**Role**: read-only T28 Render deployment preparation.
+**Result**:
+- Recommended a Render Docker Web Service using `runtime: docker`, `dockerfilePath: ./Dockerfile`, `dockerContext: .`, `plan: free`, `healthCheckPath: /`, and `DEEPSEEK_API_KEY` with `sync: false`.
+- Confirmed `webui/app.py` serves `/` with FastAPI and should return HTTP 200 when packaged and running.
+- Identified Dockerfile already bound `0.0.0.0` but hardcoded port `8000`; recommended using Render `PORT` with local fallback.
+- Warned not to store real API keys, tokens, passwords, or plaintext secret values in `render.yaml`.
+
+**Red test**:
+- Added `tests/unit/test_render_deploy.py` before implementation.
+- `& $PY -m pytest tests/unit/test_render_deploy.py -v` -> 4 failed.
+- Failure causes: missing `render.yaml`, Dockerfile not using `${PORT:-8000}`, README missing Render deployment architecture notes.
+- Failure classification: expected missing T28 code/config behavior, not syntax, dependency, environment, or test-design error.
+
+**Commit**: `655c00b` (`test(T28): add failing Render deploy checks [subagent: Pauli; human: pending review]`)
+
+### Green phase
+
+**Implementation**:
+- Added root `render.yaml` defining one free Render Docker Web Service:
+  - `type: web`
+  - `runtime: docker`
+  - `dockerfilePath: ./Dockerfile`
+  - `dockerContext: .`
+  - `healthCheckPath: /`
+  - `autoDeployTrigger: checksPass`
+  - `DEEPSEEK_API_KEY` with `sync: false`
+- Updated `Dockerfile` to run Uvicorn on `0.0.0.0` using `${PORT:-8000}`.
+- Added README Render deployment section covering architecture, CI/CD flow, secret injection, free-tier sleep, and live deployment pending.
+
+**Green verification**:
+- `& $PY -m pytest tests/unit/test_render_deploy.py tests/unit/test_distribution.py tests/unit/test_readme.py -v` -> 12 passed.
+
+**Commit**: `129286f` (`feat(T28): add Render deployment configuration [subagent: Pauli; human: pending review]`)
+
+### Refactor / Review phase
+
+**Specification Compliance Review**:
+- Reviewer: Euler (`019f639a-4d47-7db3-a58c-b0730e001bda`)
+- Result: no Critical findings. One Major process finding: `PLAN.md`, `REQUIREMENTS_CHECKLIST.md`, and `AGENT_LOG.md` still needed T28 status/evidence updates.
+- Config compliance checked against Render Blueprint spec; code/config side compliant with narrowed scope.
+
+**Code Quality Review**:
+- Reviewer: Halley (`019f639a-8f35-7e60-8790-3813d2853c00`)
+- Result: no Critical, no Major.
+- Minor findings:
+  - Docker `CMD` should use `exec` after `sh -c` for better PID 1/signal behavior.
+  - Full Render schema/CLI validation would catch more config drift but was not added to avoid external tool/network dependency.
+  - README should clarify `sync: false` prompts during initial Blueprint creation and existing services need manual secret maintenance.
+
+**Review fixes**:
+- Added `exec` to the Docker `CMD`.
+- Clarified README `sync: false` behavior for initial Blueprint creation vs existing service syncs.
+
+**Verification before Review commit**:
+- `& $PY -m pytest tests/unit/test_render_deploy.py tests/unit/test_distribution.py tests/unit/test_readme.py -v` -> 12 passed.
+- `& $PY -m ruff check tests/unit/test_render_deploy.py` -> All checks passed.
+
+**Commit**: `3865295` (`refactor(T28): complete Render review fixes [subagent: Euler/Halley; human: pending review]`)
+
+### Final verification before docs
+
+| Check | Command | Result |
+|---|---|---|
+| Target tests | `& $PY -m pytest tests/unit/test_render_deploy.py -v` | 4 passed |
+| Full suite | `& $PY -m pytest tests/ -q` | 827 passed, 5 skipped, 1 warning |
+| Ruff | `& $PY -m ruff check harness/ webui/ demo/ tests/` | All checks passed |
+| Mypy | `& $PY -m mypy harness/ webui/ demo/` | Success, no issues in 32 source files; existing unused `tests.*` override note |
+| Dependency check | `& $PY -m pip check` | No broken requirements found |
+| Credential scan | `rg -n "(sk-[A-Za-z0-9_-]{20,}\|AKIA[0-9A-Z]{16}\|BEGIN (RSA \|EC \|OPENSSH )?PRIVATE KEY\|ghp_[A-Za-z0-9_]{20,}\|xox[baprs]-[A-Za-z0-9-]{10,})" .` | Only existing explicit fake key fixture/log references |
+| Diff check | `git diff --check` | no whitespace errors |
+| Live Render URL | `curl -s -o /dev/null -w "%{http_code}" <URL>` | Not run; no public Render URL available in this stage |
+
+**Process docs**:
+- Updated `PLAN.md` T28 status to `implementation complete, live deployment pending`.
+- Updated `REQUIREMENTS_CHECKLIST.md` R036/R037 to `IN PROGRESS` with live deployment pending.
+- Updated this `AGENT_LOG.md`.
+
+**Human intervention**:
+- User explicitly narrowed T28 to code/config, automated tests, and evidence docs; real Render deployment remains pending.
+- User required fixed Python `.\.venv\Scripts\python.exe`; all Python commands used `$PY` resolved to that path.
+- No push, no merge, no T29 work, no real API keys/tokens/passwords requested or stored.
+
+**Lessons**:
+1. Render deployment configuration can be verified locally for shape and safety, but public URL verification must stay separate evidence.
+2. Docker cloud platforms need `PORT` support even when local Docker uses a fixed exposed port.
+3. `sync: false` protects secrets in Blueprint files, but operators must still configure secret values in Render.
