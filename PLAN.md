@@ -987,6 +987,54 @@ T29 (final acceptance) ← depends on all
 
 ---
 
+## T30: WebUI real AgentLoop integration
+
+1. **TASK 编号**: T30
+2. **目标**: 将 WebUI 从被动状态页升级为本地 live UI，真实接入同进程 `AgentLoop`，展示运行事件/时间线，并支持可恢复 HITL 审批。
+3. **范围调整**: 用户于 2026-07-15 明确调整 prompt：T30 注重 WebUI 功能修改和实现，不再补充公网只读演示/回放环节；老师检查时可直接拉取仓库到本地运行 WebUI。
+4. **涉及文件**:
+   - `harness/run_events.py`
+   - `harness/approval.py`
+   - `harness/agent_loop.py`
+   - `harness/cli.py`
+   - `harness/tools/base.py`
+   - `harness/tools/shell.py`
+   - `webui/app.py`
+   - `webui/state.py`
+   - `webui/websocket.py`
+   - `webui/local_runner.py`
+   - `webui/static/index.html`
+   - `webui/static/app.js`
+   - `webui/static/style.css`
+   - `README.md`
+   - targeted tests and process docs
+5. **实现要点**:
+   - Shared `RunEvent` 模型和敏感 metadata 脱敏。
+   - 线程安全、事件驱动的 `WebUIState`，WebSocket 首包发送 snapshot，后续推送 event/snapshot/timeline。
+   - `ApprovalBroker` 支持 approve/deny/timeout，并可被 WebUI endpoint 与 AgentLoop 共享。
+   - AgentLoop 可选注入 `event_sink` 与 `approval_broker`；无注入时保持旧终端行为。
+   - live HITL approve 后危险命令通过 approved dispatch 只执行一次；deny/timeout 反馈给下一轮，不直接停止为 `StopReason.HITL_DENIED`。
+   - `harness run "..." --web` 固定绑定 `127.0.0.1:8000`，ready 后打开浏览器。
+   - 前端展示 mode/status/phase/tests/failures/HITL/current event/timeline，避免裸露 `unknown`/`none`/`null` 占位词。
+6. **Red/Green evidence commits**:
+   - `a1a8a0f` Red run events; `4dba0b5` Green run events.
+   - `b12a605` Red WebUI state; `9b08560` Green WebUI state.
+   - `0cd311e` Red approval broker; `cdc7b5c` Green approval broker.
+   - `9acd5d0` Red AgentLoop events/HITL resume; `503360c` Green AgentLoop events/HITL resume.
+   - `11ab36f` Red local WebUI runner; `ac74b1e` Green local WebUI runner.
+   - `c1ada64` Red frontend rendering; `6638e8a` Green frontend rendering.
+   - `55591c7` Red local WebUI documentation.
+7. **Final verification**:
+   - `& $PY -m pytest tests/ -q` -> 852 passed, 5 skipped, 1 warning.
+   - `& $PY -m ruff check harness/ webui/ demo/ tests/` -> All checks passed.
+   - `& $PY -m mypy harness/ webui/ demo/` -> Success, no issues in 36 source files; existing unused `tests.*` override note.
+   - `& $PY -m pip check` -> No broken requirements found.
+   - `git diff --check` -> no whitespace errors.
+   - Current-tree and full-history high-confidence credential scans found only the existing explicit fake key fixture/log references; no real credentials.
+8. **Status**: DONE for local WebUI functionality; public demo replay explicitly out of scope for T30 after user adjustment; stop before push.
+
+---
+
 ## 验证命令汇总
 
 | 命令 | 用途 |

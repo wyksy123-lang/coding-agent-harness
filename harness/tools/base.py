@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from harness.models import Action, Config
 
@@ -105,6 +105,18 @@ class ToolRegistry:
         if not self.is_enabled(action.tool_name):
             raise PermissionError(f"Tool '{action.tool_name}' is not enabled")
         return self._tools[action.tool_name].execute(action.args)
+
+    def dispatch_approved(self, action: Action) -> ToolResult:
+        """Dispatch an action after an explicit human approval."""
+        if action.tool_name not in self._tools:
+            raise KeyError(action.tool_name)
+        if not self.is_enabled(action.tool_name):
+            raise PermissionError(f"Tool '{action.tool_name}' is not enabled")
+        tool = self._tools[action.tool_name]
+        approved_execute = getattr(tool, "execute_approved", None)
+        if callable(approved_execute):
+            return cast(ToolResult, approved_execute(action.args))
+        return tool.execute(action.args)
 
     def get_schemas(self) -> list[dict[str, Any]]:
         """Return the schemas of all registered tools.

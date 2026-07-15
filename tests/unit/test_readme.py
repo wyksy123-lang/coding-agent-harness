@@ -23,6 +23,8 @@ REQUIRED_SNIPPETS = [
     "harness key update",
     "harness key clear",
     'harness run "',
+    "--web",
+    "http://127.0.0.1:8000/",
     "python -m pip install build twine",
     "docker build -t coding-agent-harness .",
     "docker run -p 8000:8000",

@@ -39,7 +39,16 @@ class AgentLoopProtocol(Protocol):
 
 LoadConfig = Callable[[str | Path], Config]
 CredentialFactory = Callable[[], CredentialManagerProtocol]
-AgentLoopFactory = Callable[[Config, str], AgentLoopProtocol]
+class AgentLoopFactory(Protocol):
+    def __call__(
+        self,
+        config: Config,
+        api_key: str,
+        **kwargs: Any,
+    ) -> AgentLoopProtocol: ...
+
+
+RunWebUI = Callable[[str, Config, str, AgentLoopFactory], AgentRunResultProtocol]
 ToolConstructor = Callable[..., object]
 
 
@@ -106,7 +115,11 @@ def build_tool_registry(config: Config) -> ToolRegistryProtocol:
     return registry
 
 
-def _default_agent_loop_factory(config: Config, api_key: str) -> AgentLoopProtocol:
+def _default_agent_loop_factory(
+    config: Config,
+    api_key: str,
+    **kwargs: Any,
+) -> AgentLoopProtocol:
     from harness.llm.deepseek import DeepSeekClient
 
     agent_loop = cast(
@@ -120,7 +133,23 @@ def _default_agent_loop_factory(config: Config, api_key: str) -> AgentLoopProtoc
         timeout=config.llm_timeout,
         retry_count=config.llm_retry_count,
     )
-    return agent_loop(config, llm_client, cast(Any, build_tool_registry(config)))
+    return agent_loop(
+        config,
+        llm_client,
+        cast(Any, build_tool_registry(config)),
+        **kwargs,
+    )
+
+
+def _default_run_webui(
+    requirement: str,
+    config: Config,
+    api_key: str,
+    make_agent_loop: AgentLoopFactory,
+) -> AgentRunResultProtocol:
+    from webui.local_runner import run_with_local_webui
+
+    return run_with_local_webui(requirement, config, api_key, make_agent_loop)
 
 
 @dataclass(frozen=True)
@@ -128,6 +157,7 @@ class CLIDependencies:
     load_config: LoadConfig = ConfigLoader.load
     make_credentials: CredentialFactory = CredentialManager
     make_agent_loop: AgentLoopFactory = _default_agent_loop_factory
+    run_webui: RunWebUI = _default_run_webui
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -137,6 +167,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser = subparsers.add_parser("run")
     run_parser.add_argument("requirement")
     run_parser.add_argument("--config", default="harness.yaml")
+    run_parser.add_argument("--web", action="store_true")
 
     key_parser = subparsers.add_parser("key")
     key_subparsers = key_parser.add_subparsers(dest="key_command", required=True)
@@ -152,7 +183,10 @@ def main(
     dependencies: CLIDependencies | None = None,
 ) -> int:
     parser = build_parser()
-    args = parser.parse_args(argv)
+    try:
+        args = parser.parse_args(argv)
+    except SystemExit as exc:
+        return int(exc.code) if isinstance(exc.code, int) else 2
     deps = dependencies or CLIDependencies()
 
     command = cast(str, args.command)
@@ -179,7 +213,15 @@ def _handle_run(args: argparse.Namespace, dependencies: CLIDependencies) -> int:
         return 2
 
     requirement = cast(str, args.requirement)
-    result = dependencies.make_agent_loop(config, api_key).run(requirement)
+    if bool(getattr(args, "web", False)):
+        result = dependencies.run_webui(
+            requirement,
+            config,
+            api_key,
+            dependencies.make_agent_loop,
+        )
+    else:
+        result = dependencies.make_agent_loop(config, api_key).run(requirement)
     print(f"status: {_status_value(result.status)}")
     if result.output_files:
         print("output_files:")

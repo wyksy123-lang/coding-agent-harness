@@ -168,6 +168,28 @@ class RunCommandTool(Tool):
             },
         )
 
+    def execute_approved(self, args: dict[str, Any]) -> ToolResult:
+        cmd = args.get("cmd")
+        if cmd is None:
+            return ToolResult(
+                success=False,
+                output={},
+                error="missing required argument: cmd",
+            )
+        result = _run_shell(
+            cmd, self._target_directory, self._timeout, _TIMEOUT_ERROR
+        )
+        if isinstance(result, ToolResult):
+            return result
+        return ToolResult(
+            success=True,
+            output={
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+                "exit_code": result.returncode,
+            },
+        )
+
 
 class RunTestsTool(Tool):
     """Tool for running the test suite and returning the report path."""

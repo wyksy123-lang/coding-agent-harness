@@ -99,6 +99,53 @@ def test_run_uses_default_config_path_when_omitted(capsys: Any) -> None:
     assert "PASS" in capsys.readouterr().out
 
 
+def test_run_web_invokes_local_web_runner_with_loaded_config(
+    tmp_path: Path,
+    capsys: Any,
+) -> None:
+    config = Config(max_rounds=1, target_directory=str(tmp_path))
+    config_path = tmp_path / "harness.yaml"
+    calls: list[tuple[str, Config, str]] = []
+
+    def run_webui(
+        requirement: str,
+        config_arg: Config,
+        api_key: str,
+        make_agent_loop: Any,
+    ) -> AgentResult:
+        calls.append((requirement, config_arg, api_key))
+        assert callable(make_agent_loop)
+        return AgentResult(status=StopReason.PASS, rounds=[], output_files=[])
+
+    exit_code = main(
+        ["run", "show ui", "--web", "--config", str(config_path)],
+        dependencies=CLIDependencies(
+            load_config=lambda path: config if Path(path) == config_path else Config(),
+            make_credentials=lambda: FakeCredentials(key="fake-live-key"),
+            make_agent_loop=lambda _config, _api_key: FakeAgentLoop(),
+            run_webui=run_webui,
+        ),
+    )
+
+    assert exit_code == 0
+    assert calls == [("show ui", config, "fake-live-key")]
+    assert "PASS" in capsys.readouterr().out
+
+
+def test_run_web_does_not_accept_public_host_option(capsys: Any) -> None:
+    exit_code = main(
+        ["run", "show ui", "--web", "--host", "0.0.0.0"],
+        dependencies=CLIDependencies(
+            load_config=lambda _path: Config(),
+            make_credentials=lambda: FakeCredentials(key="fake-live-key"),
+            make_agent_loop=lambda _config, _api_key: FakeAgentLoop(),
+        ),
+    )
+
+    assert exit_code == 2
+    assert "host" in capsys.readouterr().err
+
+
 def test_run_without_key_suggests_setup_and_does_not_load_config(
     capsys: Any,
 ) -> None:

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from harness.agent_loop import AgentLoop
 from harness.llm.base import LLMClient, LLMResponse, ToolCall
-from harness.models import Config, StopReason
+from harness.models import Config, HITLRequest, HITLStatus, StopReason
+from harness.run_events import RunEventType
 from harness.tools.base import Tool, ToolRegistry, ToolResult
 
 
@@ -66,6 +69,32 @@ class PendingCommandTool(Tool):
         )
 
 
+class ApprovedCommandTool(Tool):
+    def __init__(self) -> None:
+        self.execute_calls = 0
+        self.approved_calls = 0
+
+    @property
+    def name(self) -> str:
+        return "run_command"
+
+    @property
+    def schema(self) -> dict[str, Any]:
+        return {"type": "object", "properties": {"cmd": {"type": "string"}}}
+
+    def execute(self, args: dict[str, Any]) -> ToolResult:
+        self.execute_calls += 1
+        return ToolResult(
+            success=False,
+            output={"status": "PENDING"},
+            error="command requires approval",
+        )
+
+    def execute_approved(self, args: dict[str, Any]) -> ToolResult:
+        self.approved_calls += 1
+        return ToolResult(success=True, output={"stdout": "approved\n"})
+
+
 class WriteFileToolDouble(Tool):
     def __init__(self, *, success: bool) -> None:
         self._success = success
@@ -80,6 +109,28 @@ class WriteFileToolDouble(Tool):
 
     def execute(self, args: dict[str, Any]) -> ToolResult:
         return ToolResult(success=self._success, output={}, error="write failed")
+
+
+class ScriptedApprovalBroker:
+    def __init__(self, status: HITLStatus) -> None:
+        self.status = status
+        self.requests: list[ActionRequest] = []
+
+    def request(self, action: Any, timeout: int) -> HITLRequest:
+        self.requests.append(ActionRequest(action=action, timeout=timeout))
+        return HITLRequest(
+            action=action,
+            status=self.status,
+            timestamp=datetime.now(),
+            decision=self.status.value.lower(),
+            request_id=f"hitl-{len(self.requests)}",
+        )
+
+
+@dataclass(frozen=True)
+class ActionRequest:
+    action: Any
+    timeout: int
 
 
 def _config(tmp_path: Path, *, max_rounds: int = 5, stuck_threshold: int = 3) -> Config:
@@ -108,6 +159,10 @@ def _response(name: str, arguments: dict[str, Any] | None = None) -> LLMResponse
         finish_reason="tool_calls",
         tool_calls=[_tool_call(name, arguments)],
     )
+
+
+def _multi_response(calls: list[ToolCall]) -> LLMResponse:
+    return LLMResponse(content="", finish_reason="tool_calls", tool_calls=calls)
 
 
 def _no_tool_response(content: str = "I cannot help") -> LLMResponse:
@@ -211,6 +266,86 @@ def test_run_stops_when_governance_requires_approval_and_hitl_is_pending(
     assert result.rounds[0].actions[0].tool_name == "run_command"
     assert result.rounds[0].outcome.value == "HITL_DENIED"
     assert result.rounds[0].strategy_used == "hitl_pending"
+
+
+def test_run_publishes_lifecycle_events_for_passing_test_round(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    llm = SequencedLLM([_response("run_tests")])
+    run_tests = SequencedRunTestsTool(tmp_path, [_pytest_report(0)])
+    events: list[Any] = []
+
+    loop = AgentLoop(
+        config,
+        llm,
+        _registry(config, run_tests),
+        event_sink=events.append,
+    )
+
+    result = loop.run("show progress")
+
+    assert result.status == StopReason.PASS
+    assert [event.event_type for event in events] == [
+        RunEventType.TASK_STARTED,
+        RunEventType.ROUND_STARTED,
+        RunEventType.MODEL_RESPONSE,
+        RunEventType.TOOL_REQUESTED,
+        RunEventType.TESTS_STARTED,
+        RunEventType.TESTS_COMPLETED,
+        RunEventType.RUN_FINISHED,
+    ]
+    assert events[-1].stop_reason == "PASS"
+
+
+def test_run_executes_approved_command_once_then_continues(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    llm = SequencedLLM(
+        [
+            _multi_response(
+                [
+                    _tool_call("run_command", {"cmd": "rm -rf build"}),
+                    _tool_call("run_tests"),
+                ]
+            )
+        ]
+    )
+    command = ApprovedCommandTool()
+    run_tests = SequencedRunTestsTool(tmp_path, [_pytest_report(0)])
+    registry = ToolRegistry(config)
+    registry.register(command)
+    registry.register(run_tests)
+    broker = ScriptedApprovalBroker(HITLStatus.APPROVED)
+
+    loop = AgentLoop(config, llm, registry, approval_broker=broker)
+
+    result = loop.run("approve then test")
+
+    assert result.status == StopReason.PASS
+    assert command.execute_calls == 1
+    assert command.approved_calls == 1
+    assert broker.requests[0].action.tool_name == "run_command"
+    assert result.rounds[0].outcome.value == "PASS"
+
+
+def test_run_denied_hitl_feedback_continues_to_next_round(tmp_path: Path) -> None:
+    config = _config(tmp_path)
+    llm = SequencedLLM([_response("run_command"), _response("run_tests")])
+    command = ApprovedCommandTool()
+    run_tests = SequencedRunTestsTool(tmp_path, [_pytest_report(0)])
+    registry = ToolRegistry(config)
+    registry.register(command)
+    registry.register(run_tests)
+    broker = ScriptedApprovalBroker(HITLStatus.DENIED)
+
+    loop = AgentLoop(config, llm, registry, approval_broker=broker)
+
+    result = loop.run("deny then recover")
+
+    assert result.status == StopReason.PASS
+    assert command.approved_calls == 0
+    assert result.rounds[0].outcome.value == "FAIL"
+    assert result.rounds[0].strategy_used == "hitl_denied"
+    second_prompt = "\n".join(str(message) for message in llm.messages_seen[1])
+    assert "hitl_denied" in second_prompt
 
 
 def test_run_retries_llm_failures_before_dispatching_tool(tmp_path: Path) -> None:

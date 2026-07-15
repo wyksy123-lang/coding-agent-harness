@@ -20,6 +20,8 @@ def test_get_root_returns_html_page() -> None:
     assert 'href="/static/style.css"' in response.text
     assert 'src="/static/app.js"' in response.text
     for element_id in [
+        "mode-value",
+        "run-status-value",
         "phase-value",
         "test-status-value",
         "passed-count-value",
@@ -30,8 +32,12 @@ def test_get_root_returns_html_page() -> None:
         "strategy-value",
         "stop-reason-value",
         "hitl-list",
+        "current-event-value",
+        "timeline-list",
     ]:
         assert f'id="{element_id}"' in response.text
+    for raw_placeholder in [">unknown<", ">none<", ">running<"]:
+        assert raw_placeholder not in response.text.lower()
 
 
 def test_static_frontend_assets_are_served() -> None:
@@ -42,10 +48,14 @@ def test_static_frontend_assets_are_served() -> None:
 
     assert app_js.status_code == 200
     assert "new WebSocket" in app_js.text
+    assert 'message.type === "snapshot"' in app_js.text
+    assert 'message.type === "event"' in app_js.text
+    assert "renderTimeline" in app_js.text
     assert "approve" in app_js.text
     assert "deny" in app_js.text
     assert style_css.status_code == 200
     assert "#hitl-list" in style_css.text
+    assert "#timeline-list" in style_css.text
 
 
 def test_get_status_returns_current_agent_status() -> None:
@@ -65,17 +75,17 @@ def test_get_status_returns_current_agent_status() -> None:
     response = client.get("/api/status")
 
     assert response.status_code == 200
-    assert response.json() == {
-        "phase": "green",
-        "round_number": 2,
-        "test_status": "PASS",
-        "test_summary": {"passed": 3, "failed": 0},
-        "failure_type": None,
-        "failure_details": [],
-        "strategy": "tests_passed",
-        "stop_reason": "PASS",
-        "pending_hitl": [],
-    }
+    payload = response.json()
+    assert payload["phase"] == "green"
+    assert payload["status"] == "Completed"
+    assert payload["round_number"] == 2
+    assert payload["test_status"] == "PASS"
+    assert payload["test_summary"] == {"passed": 3, "failed": 0}
+    assert payload["failure_type"] is None
+    assert payload["failure_details"] == []
+    assert payload["strategy"] == "tests_passed"
+    assert payload["stop_reason"] == "PASS"
+    assert payload["pending_hitl"] == []
 
 
 def test_websocket_sends_current_status_on_connect() -> None:
@@ -86,10 +96,10 @@ def test_websocket_sends_current_status_on_connect() -> None:
     with client.websocket_connect("/ws") as websocket:
         message = websocket.receive_json()
 
-    assert message["type"] == "status"
-    assert message["status"]["phase"] == "red"
-    assert message["status"]["round_number"] == 1
-    assert message["status"]["test_status"] == "FAIL"
+    assert message["type"] == "snapshot"
+    assert message["snapshot"]["phase"] == "red"
+    assert message["snapshot"]["round_number"] == 1
+    assert message["snapshot"]["test_status"] == "FAIL"
 
 
 def test_websocket_pushes_status_updates_after_connect() -> None:
@@ -106,10 +116,10 @@ def test_websocket_pushes_status_updates_after_connect() -> None:
     finally:
         executor.shutdown(wait=False, cancel_futures=True)
 
-    assert message["type"] == "status"
-    assert message["status"]["phase"] == "green"
-    assert message["status"]["round_number"] == 2
-    assert message["status"]["test_status"] == "PASS"
+    assert message["type"] == "snapshot"
+    assert message["snapshot"]["phase"] == "green"
+    assert message["snapshot"]["round_number"] == 2
+    assert message["snapshot"]["test_status"] == "PASS"
 
 
 def test_websocket_replies_to_ping() -> None:
@@ -182,7 +192,7 @@ def test_status_redacts_path_like_hitl_action_args() -> None:
 
 
 def test_hitl_approval_endpoint_updates_pending_request() -> None:
-    state = WebUIState()
+    state = WebUIState(mode="live")
     request = state.hitl_state.create(
         Action(tool_name="run_command", args={"cmd": "rm -rf workspace"}),
         timeout=30,
@@ -204,7 +214,7 @@ def test_hitl_approval_endpoint_updates_pending_request() -> None:
 
 
 def test_hitl_approval_endpoint_rejects_invalid_decision() -> None:
-    state = WebUIState()
+    state = WebUIState(mode="live")
     request = state.hitl_state.create(
         Action(tool_name="run_command", args={"cmd": "rm -rf workspace"}),
         timeout=30,
@@ -221,7 +231,7 @@ def test_hitl_approval_endpoint_rejects_invalid_decision() -> None:
 
 
 def test_hitl_approval_endpoint_returns_not_found_for_unknown_request() -> None:
-    client = TestClient(create_app(WebUIState()))
+    client = TestClient(create_app(WebUIState(mode="live")))
 
     response = client.post("/api/hitl/missing", json={"decision": "approve"})
 
@@ -229,7 +239,7 @@ def test_hitl_approval_endpoint_returns_not_found_for_unknown_request() -> None:
 
 
 def test_hitl_approval_endpoint_denies_pending_request() -> None:
-    state = WebUIState()
+    state = WebUIState(mode="live")
     request = state.hitl_state.create(
         Action(tool_name="run_command", args={"cmd": "rm -rf workspace"}),
         timeout=30,
@@ -282,12 +292,12 @@ def test_websocket_pushes_hitl_pending_updates_after_connect() -> None:
     finally:
         executor.shutdown(wait=False, cancel_futures=True)
 
-    assert message["type"] == "status"
-    assert len(message["status"]["pending_hitl"]) == 1
+    assert message["type"] == "snapshot"
+    assert len(message["snapshot"]["pending_hitl"]) == 1
 
 
 def test_hitl_approval_endpoint_rejects_invalid_json_body() -> None:
-    state = WebUIState()
+    state = WebUIState(mode="live")
     request = state.hitl_state.create(
         Action(tool_name="run_command", args={"cmd": "rm -rf workspace"}),
         timeout=30,
@@ -302,3 +312,20 @@ def test_hitl_approval_endpoint_rejects_invalid_json_body() -> None:
 
     assert response.status_code == 400
     assert "json" in response.json()["detail"].lower()
+
+
+def test_demo_mode_rejects_hitl_mutations() -> None:
+    state = WebUIState(mode="demo")
+    request = state.hitl_state.create(
+        Action(tool_name="run_command", args={"cmd": "rm -rf workspace"}),
+        timeout=30,
+    )
+    client = TestClient(create_app(state))
+
+    response = client.post(
+        f"/api/hitl/{request.request_id}",
+        json={"decision": "approve"},
+    )
+
+    assert response.status_code == 403
+    assert "demo" in response.json()["detail"].lower()

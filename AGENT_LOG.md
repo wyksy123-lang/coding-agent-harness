@@ -4621,3 +4621,73 @@
 - Red check after test update: `& $PY -m pytest tests/unit/test_github_actions_ci.py -v` -> 1 failed, 6 passed; failure proved the workflow still had direct curl calls and no readiness loop.
 - Green check after workflow update: `& $PY -m pytest tests/unit/test_github_actions_ci.py -v` -> 7 passed.
 - `& $PY -m ruff check tests/unit/test_github_actions_ci.py` -> All checks passed.
+
+---
+
+## LOG-059 - T30 WebUI real AgentLoop integration
+
+**Timestamp**: 2026-07-15
+**Environment**: Windows Codex checkout, fixed project venv `./.venv/Scripts/python.exe`
+**Branch**: `codex/task/T30-webui-live-integration`
+**Task**: T30 - WebUI local live integration
+**Status**: DONE for local WebUI functionality; stop before push
+
+**Scope adjustment**:
+- Original T30 prompt included public read-only demo/replay language.
+- User clarified during implementation that the goal is WebUI functionality, not a supplemental public demo. Teacher review can happen by pulling the repository locally.
+- T30 therefore implements local `harness run ... --web`, real AgentLoop event streaming, recoverable HITL, and frontend rendering. Public demo replay is explicitly out of scope for this task.
+
+**Python environment confirmation**:
+- Command:
+  - `$PY = (Resolve-Path ".\.venv\Scripts\python.exe").Path`
+  - `& $PY -c "import sys; print(sys.executable); print(sys.version)"`
+- Result: fixed project venv interpreter under `.venv\Scripts\python.exe`, Python `3.11.15`.
+
+**Subagent**:
+- Prep/review subagent: Poincare (`019f6544-1049-7e01-a7c1-db946790337a`).
+- Key findings: `webui.app:create_app` is the correct mode boundary; `webui.websocket.WebUIState` needed event-backed state; `harness.cli` factory injection is the safest CLI seam; `RunCommandTool` needed an approved execution path so approved dangerous commands are not re-routed through the same guard.
+
+**Red/Green evidence**:
+- Run events:
+  - Red commit `a1a8a0f`: `tests/unit/test_run_events.py` failed with `ModuleNotFoundError: No module named 'harness.run_events'`.
+  - Green commit `4dba0b5`: `harness/run_events.py` added typed events, snapshot reducer, timestamp serialization, and redaction.
+- WebUI state:
+  - Red commit `b12a605`: `tests/unit/test_webui_state.py` failed with `ModuleNotFoundError: No module named 'webui.state'`.
+  - Green commit `9b08560`: event-backed `WebUIState`, snapshot-first websocket messages, timeline, display fallbacks, and path/secret redaction.
+- Recoverable HITL broker:
+  - Red commit `0cd311e`: `tests/unit/test_approval_broker.py` failed with `ModuleNotFoundError: No module named 'harness.approval'`.
+  - Green commit `cdc7b5c`: `ApprovalBroker` supports request/resolve/cancel/pending and demo-mode mutation guard.
+- AgentLoop events and live HITL resume:
+  - Red commit `9acd5d0`: AgentLoop rejected new `event_sink`/`approval_broker` arguments.
+  - Green commit `503360c`: AgentLoop emits lifecycle events; live approval resumes approved commands exactly once; live deny/timeout feeds back to the next round.
+- Local WebUI runner:
+  - Red commit `11ab36f`: `webui.local_runner` was missing.
+  - Green commit `ac74b1e`: `harness run ... --web` starts local Uvicorn on `127.0.0.1:8000`, opens browser after readiness, and injects WebUI adapters.
+- Frontend live rendering:
+  - Red commit `c1ada64`: WebUI lacked mode/status/timeline DOM and did not consume `snapshot`/`event` messages.
+  - Green commit `6638e8a`: frontend renders live snapshot, HITL list, current event, and timeline without raw `unknown`/`none`/`null` placeholders.
+- Documentation:
+  - Red commit `55591c7`: README tests required local `--web` documentation and failed before README update.
+  - Green docs commit pending.
+
+**Targeted verification completed before docs commit**:
+- `& $PY -m pytest tests/unit/test_run_events.py -v` -> 4 passed.
+- `& $PY -m pytest tests/unit/test_webui_state.py tests/unit/test_webui_app.py -q` -> 22 passed, then after frontend update 23 passed.
+- `& $PY -m pytest tests/unit/test_approval_broker.py tests/unit/test_webui_app.py -q` -> 23 passed.
+- `& $PY -m pytest tests/unit/test_agent_loop.py -q` -> 11 passed.
+- `& $PY -m pytest tests/mock/test_agent_loop_mock.py tests/unit/test_agent_loop.py tests/unit/test_shell.py -q` -> 76 passed.
+- `& $PY -m pytest tests/unit/test_local_web_runner.py tests/unit/test_cli.py -q` -> 11 passed.
+- Targeted Ruff and Mypy checks for touched modules passed after each implementation layer.
+
+**Final verification**:
+- `& $PY -m pytest tests/ -q` -> 852 passed, 5 skipped, 1 warning.
+- `& $PY -m ruff check harness/ webui/ demo/ tests/` -> All checks passed.
+- `& $PY -m mypy harness/ webui/ demo/` -> Success, no issues in 36 source files; existing unused `tests.*` override note.
+- `& $PY -m pip check` -> No broken requirements found.
+- `git diff --check` -> no whitespace errors.
+- Current-tree high-confidence credential scan -> only existing explicit fake key fixture/log references (`sk-fake-test-key-not-real`), no real credentials.
+- Full-history high-confidence credential scan -> only existing explicit fake key fixture/log references, no real credentials.
+
+**Human intervention**:
+- User adjusted scope to remove public demo replay from T30 and focus on WebUI functionality.
+- No push, merge, force-push, real LLM call, real API key/token/password, Render account change, or T31 work was performed.

@@ -1,4 +1,6 @@
 const statusFields = {
+  mode: document.getElementById("mode-value"),
+  status: document.getElementById("run-status-value"),
   phase: document.getElementById("phase-value"),
   test_status: document.getElementById("test-status-value"),
   passed: document.getElementById("passed-count-value"),
@@ -11,12 +13,20 @@ const statusFields = {
 };
 const hitlList = document.getElementById("hitl-list");
 const connectionStatus = document.getElementById("connection-status");
+const currentEvent = document.getElementById("current-event-value");
+const timelineList = document.getElementById("timeline-list");
 const sensitiveNamePattern = /(api[_-]?key|token|secret|password|path|cwd|dir|directory|file)/i;
 const sensitiveContentPattern = /(api[_-]?key|token|secret|password)\s*[:=]\s*\S+/gi;
 const pathLikePattern = /([A-Za-z]:\\\S+|\\\\\S+|\/\S+|\S*[\\/]\S+|[\w.-]+\.[A-Za-z0-9]{1,8})/g;
 
 function valueOrFallback(value, fallback) {
-  return value === null || value === undefined || value === "" ? fallback : String(value);
+  if (value === null || value === undefined || value === "") {
+    return fallback;
+  }
+  const rendered = String(value);
+  return ["unknown", "none", "null", "undefined"].includes(rendered.toLowerCase())
+    ? fallback
+    : rendered;
 }
 
 function sanitizeForDisplay(name, value) {
@@ -47,23 +57,25 @@ function renderStatus(status) {
   if (!status || typeof status !== "object") {
     return;
   }
-  statusFields.phase.textContent = valueOrFallback(status.phase, "idle");
-  statusFields.test_status.textContent = valueOrFallback(status.test_status, "unknown");
+  statusFields.mode.textContent = valueOrFallback(status.mode, "Not available");
+  statusFields.status.textContent = valueOrFallback(status.status, "Not available");
+  statusFields.phase.textContent = valueOrFallback(status.phase, "Not available");
+  statusFields.test_status.textContent = valueOrFallback(status.test_status, "Not available");
   const summary =
     status.test_summary && typeof status.test_summary === "object" ? status.test_summary : {};
   statusFields.passed.textContent = valueOrFallback(summary.passed, "0");
   statusFields.failed.textContent = valueOrFallback(summary.failed, "0");
-  statusFields.failure_type.textContent = valueOrFallback(status.failure_type, "none");
+  statusFields.failure_type.textContent = valueOrFallback(status.failure_type, "Not available");
   statusFields.failure_details.textContent = renderFailureDetails(status.failure_details);
   statusFields.round_number.textContent = valueOrFallback(status.round_number, "0");
-  statusFields.strategy.textContent = valueOrFallback(status.strategy, "none");
-  statusFields.stop_reason.textContent = valueOrFallback(status.stop_reason, "running");
+  statusFields.strategy.textContent = valueOrFallback(status.strategy, "Not available");
+  statusFields.stop_reason.textContent = valueOrFallback(status.stop_reason, "Not available");
   renderHitl(Array.isArray(status.pending_hitl) ? status.pending_hitl : []);
 }
 
 function renderFailureDetails(details) {
   if (!Array.isArray(details) || details.length === 0) {
-    return "none";
+    return "Not available";
   }
   return details
     .map((detail) => {
@@ -74,6 +86,37 @@ function renderFailureDetails(details) {
     })
     .filter(Boolean)
     .join("; ");
+}
+
+function renderTimeline(events) {
+  const timeline = Array.isArray(events) ? events : [];
+  timelineList.replaceChildren();
+  if (timeline.length === 0) {
+    currentEvent.textContent = "Not available";
+    const empty = document.createElement("li");
+    empty.className = "empty-state";
+    empty.textContent = "No events yet";
+    timelineList.append(empty);
+    return;
+  }
+
+  const latest = timeline[timeline.length - 1];
+  currentEvent.textContent = eventLabel(latest);
+  for (const event of timeline.slice(-20)) {
+    const item = document.createElement("li");
+    item.textContent = eventLabel(event);
+    timelineList.append(item);
+  }
+}
+
+function eventLabel(event) {
+  if (!event || typeof event !== "object") {
+    return "Not available";
+  }
+  const type = valueOrFallback(event.event_type, "event");
+  const summary = valueOrFallback(event.summary, "");
+  const round = event.round_index === null || event.round_index === undefined ? "" : `r${event.round_index}`;
+  return [round, type, summary].filter(Boolean).join(" - ");
 }
 
 function renderHitl(requests) {
@@ -95,7 +138,7 @@ function renderHitl(requests) {
     const requestId = valueOrFallback(hitlRequest.request_id, "unknown-request");
     const action =
       hitlRequest.action && typeof hitlRequest.action === "object" ? hitlRequest.action : {};
-    title.textContent = `${valueOrFallback(action.tool_name, "unknown tool")} - ${requestId}`;
+    title.textContent = `${valueOrFallback(action.tool_name, "tool")} - ${requestId}`;
 
     const args = document.createElement("pre");
     args.textContent = JSON.stringify(sanitizeForDisplay("args", action.args || {}), null, 2);
@@ -148,12 +191,12 @@ function decisionButton(requestId, decision, label, errorElement) {
 }
 
 function connectWebSocket() {
-  connectionStatus.textContent = "connecting";
+  connectionStatus.textContent = "Connecting";
   const protocol = window.location.protocol === "https:" ? "wss" : "ws";
   const socket = new WebSocket(`${protocol}://${window.location.host}/ws`);
 
   socket.addEventListener("open", () => {
-    connectionStatus.textContent = "connected";
+    connectionStatus.textContent = "Connected";
   });
   socket.addEventListener("message", (event) => {
     let message;
@@ -162,15 +205,21 @@ function connectWebSocket() {
     } catch {
       return;
     }
-    if (message && message.type === "status" && typeof message.status === "object") {
+    if (message && message.type === "snapshot" && typeof message.snapshot === "object") {
+      renderStatus(message.snapshot);
+      renderTimeline(message.timeline || message.snapshot.timeline || []);
+    } else if (message && message.type === "event" && typeof message.snapshot === "object") {
+      renderStatus(message.snapshot);
+      renderTimeline(message.timeline || []);
+    } else if (message && message.type === "status" && typeof message.status === "object") {
       renderStatus(message.status);
     }
   });
   socket.addEventListener("error", () => {
-    connectionStatus.textContent = "offline";
+    connectionStatus.textContent = "Offline";
   });
   socket.addEventListener("close", () => {
-    connectionStatus.textContent = "reconnecting";
+    connectionStatus.textContent = "Reconnecting";
     window.setTimeout(connectWebSocket, 1000);
   });
 }
