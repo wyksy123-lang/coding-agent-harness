@@ -7,9 +7,11 @@ from harness.run_events import (
     RunEvent,
     RunEventType,
     RunPhase,
-    TestStatus,
     apply_event_to_snapshot,
     sanitize_event_metadata,
+)
+from harness.run_events import (
+    TestStatus as RunTestStatus,
 )
 
 
@@ -104,7 +106,7 @@ def test_tests_and_finish_events_update_snapshot_semantics() -> None:
             run_id="run-1",
             event_type=RunEventType.TESTS_STARTED,
             phase=RunPhase.TESTING,
-            test_status=TestStatus.RUNNING,
+            test_status=RunTestStatus.RUNNING,
             summary="Running tests",
         ),
     )
@@ -148,4 +150,3 @@ def test_run_event_metadata_sanitizer_redacts_secrets_headers_env_and_paths() ->
     assert "C:\\Users\\student" not in rendered
     assert sanitized["api_key"] == "[redacted]"
     assert sanitized["headers"]["Authorization"] == "[redacted]"
-
