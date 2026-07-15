@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from harness.agent_loop import AgentResult
-from harness.cli import CLIDependencies, build_tool_registry, main
+from harness.cli import CLIDependencies, build_parser, build_tool_registry, main
 from harness.models import Action, Config, StopReason
 
 
@@ -45,6 +45,49 @@ class FakeAgentLoop:
         return AgentResult(status=self._status, rounds=[], output_files=[])
 
 
+def test_run_parser_accepts_flash_and_pro_model_aliases() -> None:
+    parser = build_parser()
+
+    flash_args = parser.parse_args(["run", "task", "--model", "flash"])
+    pro_args = parser.parse_args(["run", "task", "--model", "pro"])
+
+    assert flash_args.model == "flash"
+    assert pro_args.model == "pro"
+
+
+def test_run_rejects_invalid_model_before_loading_config_or_agent_loop(
+    capsys: Any,
+) -> None:
+    load_called = False
+    agent_loop_called = False
+
+    def load_config(_path: str | Path) -> Config:
+        nonlocal load_called
+        load_called = True
+        return Config()
+
+    def make_agent_loop(_config: Config, _api_key: str) -> FakeAgentLoop:
+        nonlocal agent_loop_called
+        agent_loop_called = True
+        return FakeAgentLoop()
+
+    exit_code = main(
+        ["run", "task", "--model", "invalid"],
+        dependencies=CLIDependencies(
+            load_config=load_config,
+            make_credentials=lambda: FakeCredentials(key="fake-live-key"),
+            make_agent_loop=make_agent_loop,
+        ),
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert "flash" in captured.err
+    assert "pro" in captured.err
+    assert not load_called
+    assert not agent_loop_called
+
+
 def test_run_loads_config_and_invokes_agent_loop_with_requested_file(
     tmp_path: Path, capsys: Any
 ) -> None:
@@ -79,6 +122,86 @@ def test_run_loads_config_and_invokes_agent_loop_with_requested_file(
     assert "PASS" in output
 
 
+def test_run_without_model_preserves_loaded_config_model(capsys: Any) -> None:
+    config = Config(model="configured-model")
+    factory_inputs: list[tuple[Config, str]] = []
+
+    def make_agent_loop(config_arg: Config, api_key: str) -> FakeAgentLoop:
+        factory_inputs.append((config_arg, api_key))
+        return FakeAgentLoop()
+
+    exit_code = main(
+        ["run", "use configured model"],
+        dependencies=CLIDependencies(
+            load_config=lambda _path: config,
+            make_credentials=lambda: FakeCredentials(key="fake-live-key"),
+            make_agent_loop=make_agent_loop,
+        ),
+    )
+
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert factory_inputs[0][0].model == "configured-model"
+    assert config.model == "configured-model"
+    assert "model: configured-model" in output
+
+
+def test_run_model_flash_overrides_config_for_current_run_only(
+    capsys: Any,
+) -> None:
+    config = Config(model="configured-model")
+    agent_loop = FakeAgentLoop()
+    factory_inputs: list[tuple[Config, str]] = []
+
+    def make_agent_loop(config_arg: Config, api_key: str) -> FakeAgentLoop:
+        factory_inputs.append((config_arg, api_key))
+        return agent_loop
+
+    exit_code = main(
+        ["run", "use flash", "--model", "flash"],
+        dependencies=CLIDependencies(
+            load_config=lambda _path: config,
+            make_credentials=lambda: FakeCredentials(key="fake-live-key"),
+            make_agent_loop=make_agent_loop,
+        ),
+    )
+
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert factory_inputs[0][0].model == "deepseek-v4-flash"
+    assert factory_inputs[0][0] is not config
+    assert config.model == "configured-model"
+    assert agent_loop.requirements == ["use flash"]
+    assert "model: deepseek-v4-flash" in output
+    assert "fake-live-key" not in output
+
+
+def test_run_model_pro_overrides_config_for_current_run_only(
+    capsys: Any,
+) -> None:
+    config = Config(model="configured-model")
+    factory_inputs: list[tuple[Config, str]] = []
+
+    def make_agent_loop(config_arg: Config, api_key: str) -> FakeAgentLoop:
+        factory_inputs.append((config_arg, api_key))
+        return FakeAgentLoop()
+
+    exit_code = main(
+        ["run", "use pro", "--model", "pro"],
+        dependencies=CLIDependencies(
+            load_config=lambda _path: config,
+            make_credentials=lambda: FakeCredentials(key="fake-live-key"),
+            make_agent_loop=make_agent_loop,
+        ),
+    )
+
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert factory_inputs[0][0].model == "deepseek-v4-pro"
+    assert config.model == "configured-model"
+    assert "model: deepseek-v4-pro" in output
+
+
 def test_run_uses_default_config_path_when_omitted(capsys: Any) -> None:
     loaded_paths: list[Path] = []
 
@@ -98,6 +221,81 @@ def test_run_uses_default_config_path_when_omitted(capsys: Any) -> None:
     assert exit_code == 0
     assert loaded_paths == [Path("harness.yaml")]
     assert "PASS" in capsys.readouterr().out
+
+
+def test_run_web_model_flash_passes_override_to_web_runner(
+    tmp_path: Path,
+    capsys: Any,
+) -> None:
+    config = Config(model="configured-model", target_directory=str(tmp_path))
+    calls: list[tuple[str, Config, str]] = []
+    make_agent_loop_called = False
+
+    def make_agent_loop(_config: Config, _api_key: str) -> FakeAgentLoop:
+        nonlocal make_agent_loop_called
+        make_agent_loop_called = True
+        return FakeAgentLoop()
+
+    def run_webui(
+        requirement: str,
+        config_arg: Config,
+        api_key: str,
+        make_agent_loop: Any,
+    ) -> AgentResult:
+        calls.append((requirement, config_arg, api_key))
+        assert callable(make_agent_loop)
+        return AgentResult(status=StopReason.PASS, rounds=[], output_files=[])
+
+    exit_code = main(
+        ["run", "show flash ui", "--model", "flash", "--web"],
+        dependencies=CLIDependencies(
+            load_config=lambda _path: config,
+            make_credentials=lambda: FakeCredentials(key="fake-live-key"),
+            make_agent_loop=make_agent_loop,
+            run_webui=run_webui,
+        ),
+    )
+
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert calls[0][1].model == "deepseek-v4-flash"
+    assert config.model == "configured-model"
+    assert not make_agent_loop_called
+    assert "model: deepseek-v4-flash" in output
+
+
+def test_run_web_model_pro_accepts_web_before_model_order(
+    tmp_path: Path,
+    capsys: Any,
+) -> None:
+    config = Config(model="configured-model", target_directory=str(tmp_path))
+    calls: list[tuple[str, Config, str]] = []
+
+    def run_webui(
+        requirement: str,
+        config_arg: Config,
+        api_key: str,
+        make_agent_loop: Any,
+    ) -> AgentResult:
+        calls.append((requirement, config_arg, api_key))
+        assert callable(make_agent_loop)
+        return AgentResult(status=StopReason.PASS, rounds=[], output_files=[])
+
+    exit_code = main(
+        ["run", "show pro ui", "--web", "--model", "pro"],
+        dependencies=CLIDependencies(
+            load_config=lambda _path: config,
+            make_credentials=lambda: FakeCredentials(key="fake-live-key"),
+            make_agent_loop=lambda _config, _api_key: FakeAgentLoop(),
+            run_webui=run_webui,
+        ),
+    )
+
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert calls[0][1].model == "deepseek-v4-pro"
+    assert config.model == "configured-model"
+    assert "model: deepseek-v4-pro" in output
 
 
 def test_run_web_invokes_local_web_runner_with_loaded_config(
@@ -145,6 +343,14 @@ def test_run_web_does_not_accept_public_host_option(capsys: Any) -> None:
 
     assert exit_code == 2
     assert "host" in capsys.readouterr().err
+
+
+def test_run_help_lists_model_alias_choices(capsys: Any) -> None:
+    exit_code = main(["run", "--help"])
+
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert "--model {flash,pro}" in output
 
 
 def test_run_without_key_suggests_setup_and_does_not_load_config(
