@@ -67,12 +67,31 @@ def test_dockerfile_binds_webui_to_render_port_env_with_local_fallback() -> None
     assert "webui.app:app" in dockerfile
 
 
-def test_readme_documents_render_architecture_without_live_url_claim() -> None:
-    readme_lower = README_PATH.read_text(encoding="utf-8").lower()
+def test_readme_documents_verified_render_url_without_final_acceptance_claims() -> None:
+    readme = README_PATH.read_text(encoding="utf-8")
+    readme_lower = readme.lower()
 
     assert "render deployment" in readme_lower
     assert "docker web service" in readme_lower
     assert "render.yaml" in readme_lower
     assert "checks pass" in readme_lower
-    assert "live deployment pending" in readme_lower
+    assert "https://coding-agent-harness-zq0k.onrender.com/" in readme
+    assert "checked_at_utc=2026-07-15T03:05:17Z" in readme
+    assert "GET / -> 200" in readme
+    assert "text/html" in readme_lower
+    assert "length 1647" in readme_lower
+    assert "GET /static/style.css -> 200" in readme
+    assert "text/css" in readme_lower
+    assert "length 1453" in readme_lower
+    assert "GET /static/app.js -> 200" in readme
+    assert "application/javascript" in readme_lower
+    assert "length 6538" in readme_lower
+    assert "Coding Agent Harness" in readme
+    assert "HITL" in readme
+    assert "/static/style.css" in readme
+    assert "/static/app.js" in readme
+    assert "secret_pattern_match=False" in readme
+    assert "live deployment pending" not in readme_lower
     assert "production deployment is live" not in readme_lower
+    assert "all acceptance criteria pass" not in readme_lower
+    assert "final acceptance complete" not in readme_lower
