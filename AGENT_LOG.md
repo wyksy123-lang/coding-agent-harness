@@ -4593,3 +4593,31 @@
 1. On Windows, build artifacts produced in an elevated context can become unreadable to the normal sandbox; record that as environment evidence rather than pretending `dist/*` passed locally.
 2. Fresh-install validation needs real dependency resolution unless a dependency wheelhouse is supplied; sandbox network failures should be separated from package correctness.
 3. Final acceptance should distinguish product readiness from human-owned submission evidence such as NJU URLs, PR creation, and latest remote CI runs.
+
+### Merge-blocking CI fix addendum
+
+**Timestamp**: 2026-07-15
+**Trigger**: User reported merge failure with GitHub Actions `Verify Docker WebUI` failing.
+
+**Remote evidence**:
+- Workflow run: `29403993688`.
+- Failed job: `Docker image build`, job id `87314937754`.
+- Other jobs in the run completed successfully.
+- Failure step: `Verify Docker WebUI`.
+- Log excerpt: `curl: (56) Recv failure: Connection reset by peer`.
+- Timing evidence: `docker run` completed at `2026-07-15T09:19:12Z`; the first curl began in the same second, about 0.28 seconds later.
+
+**Root cause**:
+- The workflow started the container in detached mode and immediately made one curl attempt per URL.
+- The `curl --retry` flags did not retry this `Recv failure` condition, so a transient startup/reset during WebUI boot failed the merge check before the service had a readiness window.
+
+**Fix**:
+- Added an explicit readiness loop for `/`, `/static/style.css`, and `/static/app.js`.
+- The loop waits up to 30 attempts with 2 seconds between attempts.
+- Added diagnostic output on retry/failure: `docker ps -a`, `docker logs --tail 50`, final `docker inspect`, and full logs.
+- No Docker publish, token, API key, real LLM call, or Render account change was added.
+
+**Local verification**:
+- Red check after test update: `& $PY -m pytest tests/unit/test_github_actions_ci.py -v` -> 1 failed, 6 passed; failure proved the workflow still had direct curl calls and no readiness loop.
+- Green check after workflow update: `& $PY -m pytest tests/unit/test_github_actions_ci.py -v` -> 7 passed.
+- `& $PY -m ruff check tests/unit/test_github_actions_ci.py` -> All checks passed.

@@ -73,15 +73,14 @@ def test_github_actions_workflow_builds_docker_image_without_publishing() -> Non
         str(step["run"]) for step in docker_job["steps"] if "run" in step
     )
     assert "docker run --rm -d --name coding-agent-harness-ci -p 8000:8000" in docker_commands
-    assert "curl --fail --retry 10 --retry-delay 2 http://127.0.0.1:8000/" in docker_commands
-    assert (
-        "curl --fail --retry 10 --retry-delay 2 "
-        "http://127.0.0.1:8000/static/style.css"
-    ) in docker_commands
-    assert (
-        "curl --fail --retry 10 --retry-delay 2 "
-        "http://127.0.0.1:8000/static/app.js"
-    ) in docker_commands
+    assert "for path in / /static/style.css /static/app.js" in docker_commands
+    assert "for attempt in 1 2 3 4 5" in docker_commands
+    assert 'curl --fail --silent --show-error "$url"' in docker_commands
+    assert "Waiting for $url (attempt $attempt/30)" in docker_commands
+    assert "docker ps -a" in docker_commands
+    assert "docker logs --tail 50 coding-agent-harness-ci" in docker_commands
+    assert "docker inspect coding-agent-harness-ci" in docker_commands
+    assert "Docker WebUI did not become ready at $url" in docker_commands
     assert "docker stop coding-agent-harness-ci" in docker_commands
 
 
