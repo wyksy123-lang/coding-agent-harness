@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
+from harness.approval import ApprovalBroker
 from harness.feedback import (
     FailureClassifier,
     FeedbackInjector,
@@ -19,16 +20,29 @@ from harness.models import (
     Failure,
     FailureType,
     FeedbackMessage,
+    HITLRequest,
+    HITLStatus,
     RoundOutcome,
     RoundRecord,
     StopReason,
     TestResult,
+)
+from harness.run_events import (
+    HITLDecision,
+    RunEvent,
+    RunEventType,
+    RunPhase,
+    TestStatus,
 )
 from harness.tools.base import ToolRegistry, ToolResult
 
 
 class RoundRecorder(Protocol):
     def record(self, round_record: RoundRecord) -> None: ...
+
+
+class RunEventSink(Protocol):
+    def __call__(self, event: RunEvent) -> None: ...
 
 
 @dataclass
@@ -50,6 +64,8 @@ class AgentLoop:
         memory: MemoryRetriever | None = None,
         memory_recorder: RoundRecorder | None = None,
         hitl_state: HITLState | None = None,
+        approval_broker: ApprovalBroker | None = None,
+        event_sink: RunEventSink | None = None,
     ) -> None:
         self.config = config
         self.llm_client = llm_client
@@ -57,15 +73,36 @@ class AgentLoop:
         self.memory = memory or MemoryRetriever(config.memory_file)
         self.memory_recorder = memory_recorder or MemoryRecorder(config.memory_file)
         self.hitl_state = hitl_state or HITLState()
+        self.approval_broker = approval_broker
+        self.event_sink = event_sink
+        self._run_id = "agent-run"
+        self._event_index = 0
         self.tracker = RoundTracker(config.max_rounds, config.stuck_threshold)
         self.output_files: list[str] = []
 
     def run(self, requirement: str) -> AgentResult:
+        self._emit(
+            RunEventType.TASK_STARTED,
+            phase=RunPhase.RUNNING,
+            summary="Task started",
+        )
         messages = _initial_messages(requirement)
         has_green_tests = False
 
         for round_number in range(1, self.config.max_rounds + 1):
+            self._emit(
+                RunEventType.ROUND_STARTED,
+                round_index=round_number,
+                phase=RunPhase.RUNNING,
+                summary=f"Round {round_number} started",
+            )
             response = self._chat_with_retries(messages)
+            self._emit(
+                RunEventType.MODEL_RESPONSE,
+                round_index=round_number,
+                phase=RunPhase.RUNNING,
+                summary=response.finish_reason,
+            )
             actions = [_action_from_tool_call(call) for call in response.tool_calls]
             if not actions:
                 record = _round_record(
@@ -91,6 +128,13 @@ class AgentLoop:
             record = _round_record(round_number, actions, RoundOutcome.FAIL, "", "")
 
             for action in actions:
+                self._emit(
+                    RunEventType.TOOL_REQUESTED,
+                    round_index=round_number,
+                    phase=RunPhase.RUNNING,
+                    tool_name=action.tool_name,
+                    summary=action.tool_name,
+                )
                 if action.tool_name == "finish":
                     if has_green_tests:
                         tool_result = self._dispatch(action)
@@ -129,26 +173,65 @@ class AgentLoop:
                         )
                     break
 
+                if action.tool_name == "run_tests":
+                    self._emit(
+                        RunEventType.TESTS_STARTED,
+                        round_index=round_number,
+                        phase=RunPhase.TESTING,
+                        tool_name=action.tool_name,
+                        summary="Tests started",
+                    )
                 tool_result = self._dispatch(action)
                 if _requires_approval(tool_result):
-                    request = self.hitl_state.create(
-                        action, self.config.hitl_timeout_seconds
+                    if self.approval_broker is None:
+                        request = self.hitl_state.create(
+                            action, self.config.hitl_timeout_seconds
+                        )
+                        record = _round_record(
+                            round_number,
+                            actions,
+                            RoundOutcome.HITL_DENIED,
+                            _hitl_failure_fingerprint(action, request.status.value),
+                            "hitl_pending",
+                        )
+                        plain_feedback = _plain_feedback_message(
+                            "hitl_pending",
+                            f"Action {action.tool_name} requires human approval.",
+                        )
+                        break
+
+                    request = self.approval_broker.request(
+                        action,
+                        self.config.hitl_timeout_seconds,
                     )
-                    record = _round_record(
-                        round_number,
-                        actions,
-                        RoundOutcome.HITL_DENIED,
-                        _hitl_failure_fingerprint(action, request.status.value),
-                        "hitl_pending",
-                    )
-                    plain_feedback = _plain_feedback_message(
-                        "hitl_pending",
-                        f"Action {action.tool_name} requires human approval.",
-                    )
-                    break
+                    self._emit_hitl_events(round_number, action, request)
+                    if request.status == HITLStatus.APPROVED:
+                        tool_result = self._dispatch(action, approved=True)
+                    else:
+                        strategy = _hitl_strategy(request)
+                        record = _round_record(
+                            round_number,
+                            actions,
+                            RoundOutcome.FAIL,
+                            _hitl_failure_fingerprint(action, request.status.value),
+                            strategy,
+                        )
+                        plain_feedback = _plain_feedback_message(
+                            strategy,
+                            f"Action {action.tool_name} was not approved.",
+                        )
+                        break
 
                 if action.tool_name == "run_tests":
                     test_result = _test_result_from_tool_result(tool_result)
+                    self._emit(
+                        RunEventType.TESTS_COMPLETED,
+                        round_index=round_number,
+                        phase=RunPhase.TESTING,
+                        tool_name=action.tool_name,
+                        test_status=_event_test_status(test_result),
+                        summary=test_result.status,
+                    )
                     has_green_tests = test_result.status == "PASS"
                     record, feedback = self._record_from_test_result(
                         round_number,
@@ -200,8 +283,16 @@ class AgentLoop:
             raise RuntimeError("LLM retry loop exited without an exception")
         raise last_exception
 
-    def _dispatch(self, action: Action) -> ToolResult:
+    def _dispatch(self, action: Action, *, approved: bool = False) -> ToolResult:
         try:
+            if approved:
+                dispatch_approved = getattr(
+                    self.tool_registry,
+                    "dispatch_approved",
+                    None,
+                )
+                if callable(dispatch_approved):
+                    return cast(ToolResult, dispatch_approved(action))
             return self.tool_registry.dispatch(action)
         except Exception as exc:
             return ToolResult(success=False, output={}, error=str(exc))
@@ -248,6 +339,12 @@ class AgentLoop:
         )
 
     def _result(self, status: StopReason) -> AgentResult:
+        self._emit(
+            RunEventType.RUN_FINISHED,
+            phase=RunPhase.COMPLETED if status == StopReason.PASS else RunPhase.FAILED,
+            stop_reason=status.value,
+            summary=status.value,
+        )
         return AgentResult(
             status=status,
             rounds=list(self.tracker.history),
@@ -256,6 +353,62 @@ class AgentLoop:
 
     def _record_memory(self, record: RoundRecord) -> None:
         self.memory_recorder.record(record)
+
+    def _emit(
+        self,
+        event_type: RunEventType,
+        *,
+        round_index: int | None = None,
+        phase: RunPhase | None = None,
+        summary: str = "",
+        tool_name: str | None = None,
+        test_status: TestStatus | None = None,
+        hitl_request_id: str | None = None,
+        hitl_decision: HITLDecision | None = None,
+        stop_reason: str | None = None,
+    ) -> None:
+        if self.event_sink is None:
+            return
+        self._event_index += 1
+        self.event_sink(
+            RunEvent(
+                event_id=f"{self._run_id}-{self._event_index:04d}",
+                run_id=self._run_id,
+                event_type=event_type,
+                round_index=round_index,
+                phase=phase,
+                summary=summary,
+                tool_name=tool_name,
+                test_status=test_status,
+                hitl_request_id=hitl_request_id,
+                hitl_decision=hitl_decision,
+                stop_reason=stop_reason,
+            )
+        )
+
+    def _emit_hitl_events(
+        self,
+        round_number: int,
+        action: Action,
+        request: HITLRequest,
+    ) -> None:
+        self._emit(
+            RunEventType.HITL_REQUESTED,
+            round_index=round_number,
+            phase=RunPhase.AWAITING_APPROVAL,
+            tool_name=action.tool_name,
+            hitl_request_id=request.request_id,
+            summary="Approval requested",
+        )
+        self._emit(
+            RunEventType.HITL_RESOLVED,
+            round_index=round_number,
+            phase=RunPhase.RUNNING,
+            tool_name=action.tool_name,
+            hitl_request_id=request.request_id,
+            hitl_decision=_event_hitl_decision(request),
+            summary=request.status.value,
+        )
 
 
 def _initial_messages(requirement: str) -> list[dict[str, Any]]:
@@ -296,6 +449,28 @@ def _action_from_tool_call(tool_call: ToolCall) -> Action:
 
 def _requires_approval(tool_result: ToolResult) -> bool:
     return tool_result.output.get("status") == "PENDING"
+
+
+def _event_test_status(test_result: TestResult) -> TestStatus:
+    return {
+        "PASS": TestStatus.PASSED,
+        "FAIL": TestStatus.FAILED,
+        "ERROR": TestStatus.ERROR,
+    }.get(test_result.status, TestStatus.ERROR)
+
+
+def _event_hitl_decision(request: HITLRequest) -> HITLDecision | None:
+    if request.status == HITLStatus.APPROVED:
+        return HITLDecision.APPROVED
+    if request.status in {HITLStatus.DENIED, HITLStatus.TIMEOUT}:
+        return HITLDecision.DENIED
+    return None
+
+
+def _hitl_strategy(request: HITLRequest) -> str:
+    if request.status == HITLStatus.TIMEOUT:
+        return "hitl_timeout"
+    return "hitl_denied"
 
 
 def _invalidates_green_tests(action: Action) -> bool:
