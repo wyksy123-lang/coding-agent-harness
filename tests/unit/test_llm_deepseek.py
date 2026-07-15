@@ -762,6 +762,45 @@ class TestDeepSeekClientNonRetriableErrors:
         assert exc_info.value.retryable is False
         assert "invalid tool schema" in exc_info.value.safe_message
 
+    @pytest.mark.parametrize("status_code", [408, 429, 500, 502, 503, 504])
+    def test_retriable_http_errors_retry_then_raise_request_error(self, status_code):
+        call_count = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            return httpx.Response(
+                status_code,
+                json={"error": {"message": f"retryable {status_code}"}},
+            )
+
+        transport = MockTransport(handler)
+        client = _make_client(transport=transport, retry_count=2)
+        with pytest.raises(llm_base.LLMRequestError) as exc_info:
+            client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
+        assert call_count == 3
+        assert exc_info.value.status_code == status_code
+        assert exc_info.value.retryable is True
+
+    def test_http_422_raises_safe_request_error_without_retry(self):
+        call_count = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            return httpx.Response(
+                422,
+                json={"error": {"message": "semantic request error"}},
+            )
+
+        transport = MockTransport(handler)
+        client = _make_client(transport=transport, retry_count=3)
+        with pytest.raises(llm_base.LLMRequestError) as exc_info:
+            client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
+        assert call_count == 1
+        assert exc_info.value.status_code == 422
+        assert exc_info.value.retryable is False
+
     def test_http_402_mentions_quota_without_retry(self):
         transport = MockTransport(
             lambda req: httpx.Response(402, json={"error": {"message": "balance low"}})
@@ -803,6 +842,69 @@ class TestDeepSeekClientNonRetriableErrors:
         assert call_count == 3
         assert exc_info.value.retryable is True
         assert exc_info.value.status_code is None
+
+    def test_request_errors_retry_then_raise_safe_request_error(self):
+        call_count = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            raise httpx.RemoteProtocolError(
+                "server dropped Authorization: Bearer "
+                f"{FAKE_API_KEY} from C:\\Users\\alice\\project\\.env"
+            )
+
+        transport = MockTransport(handler)
+        client = _make_client(transport=transport, retry_count=2)
+
+        with pytest.raises(llm_base.LLMRequestError) as exc_info:
+            client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
+
+        assert call_count == 3
+        assert exc_info.value.retryable is True
+        assert exc_info.value.status_code is None
+        assert FAKE_API_KEY not in exc_info.value.safe_message
+        assert "Bearer" not in exc_info.value.safe_message
+        assert "C:\\Users\\alice" not in exc_info.value.safe_message
+        assert ".env" not in exc_info.value.safe_message
+
+    def test_http_error_message_redacts_tokens_and_paths(self):
+        transport = MockTransport(
+            lambda req: httpx.Response(
+                400,
+                json={
+                    "error": {
+                        "message": (
+                            "bad Authorization: Bearer "
+                            f"{FAKE_API_KEY} at C:\\Users\\alice\\repo\\.env"
+                        )
+                    }
+                },
+            )
+        )
+        client = _make_client(transport=transport, retry_count=0)
+
+        with pytest.raises(llm_base.LLMRequestError) as exc_info:
+            client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
+
+        safe_message = exc_info.value.safe_message
+        assert FAKE_API_KEY not in safe_message
+        assert "Bearer" not in safe_message
+        assert "C:\\Users\\alice" not in safe_message
+        assert ".env" not in safe_message
+
+    def test_unknown_finish_reason_is_preserved_without_response_error(self):
+        transport = MockTransport(
+            lambda req: httpx.Response(
+                200,
+                json=_make_api_response(content="Done.", finish_reason="content_filter"),
+            )
+        )
+        client = _make_client(transport=transport)
+
+        result = client.chat(messages=[{"role": "user", "content": "hi"}], tools=[])
+
+        assert result.finish_reason == "content_filter"
 
 
 class TestDeepSeekClientResourceCleanup:

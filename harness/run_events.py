@@ -45,16 +45,18 @@ class HITLDecision(StrEnum):
 
 
 _SENSITIVE_NAME_RE = re.compile(
-    r"(api[_-]?key|authorization|token|secret|password|path|cwd|dir|directory|file)",
+    r"(api[_-]?key|authorization|token|secret|password|env|path|cwd|dir|directory|file)",
     re.IGNORECASE,
 )
 _HIGH_CONFIDENCE_SECRET_RE = re.compile(
     r"(sk-[A-Za-z0-9_-]+|AKIA[0-9A-Z]{16}|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY)"
 )
 _SENSITIVE_CONTENT_RE = re.compile(
-    r"(api[_-]?key|authorization|token|secret|password)\s*[:=]\s*\S+",
+    r"\b(api[_-]?key|authorization|token|secret|password)\b"
+    r"\s*[:=]\s*(?:Bearer\s+)?\S+",
     re.IGNORECASE,
 )
+_BEARER_SECRET_RE = re.compile(r"\bBearer\s+\S+", re.IGNORECASE)
 _WINDOWS_USER_PATH_RE = re.compile(r"C:\\Users\\\S+", re.IGNORECASE)
 _ENV_FILE_RE = re.compile(r"\S*\.env\S*", re.IGNORECASE)
 _PATH_LIKE_RE = re.compile(
@@ -87,7 +89,7 @@ class RunEvent:
             "timestamp": _format_timestamp(self.timestamp),
             "round_index": self.round_index,
             "phase": self.phase.value if self.phase is not None else None,
-            "summary": self.summary,
+            "summary": _sanitize_string(self.summary),
             "tool_name": self.tool_name,
             "tool_status": self.tool_status,
             "test_status": self.test_status.value if self.test_status is not None else None,
@@ -130,7 +132,8 @@ def apply_event_to_snapshot(
             event.metadata.get("failure_type", "LLM_API_ERROR")
         )
         details = event.metadata.get("failure_details", event.summary)
-        current["failure_details"] = [{"message": str(details)}]
+        safe_details = sanitize_event_metadata({"message": details})["message"]
+        current["failure_details"] = [{"message": str(safe_details)}]
     if event.event_type == RunEventType.TESTS_STARTED:
         current["test_status"] = TestStatus.RUNNING.value
     if event.event_type == RunEventType.TESTS_COMPLETED:
@@ -191,6 +194,7 @@ def _sanitize_string(value: str) -> str:
         lambda match: f"{match.group(1)}=[redacted]",
         redacted,
     )
+    redacted = _BEARER_SECRET_RE.sub("[redacted]", redacted)
     redacted = _WINDOWS_USER_PATH_RE.sub("[redacted]", redacted)
     redacted = _ENV_FILE_RE.sub("[redacted]", redacted)
     redacted = _PATH_LIKE_RE.sub("[redacted]", redacted)

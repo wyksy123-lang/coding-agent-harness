@@ -145,7 +145,7 @@ class AgentLoop:
             plain_feedback: dict[str, Any] | None = None
             record = _round_record(round_number, actions, RoundOutcome.FAIL, "", "")
 
-            for action in actions:
+            for index, action in enumerate(actions):
                 self._emit(
                     RunEventType.TOOL_REQUESTED,
                     round_index=round_number,
@@ -156,7 +156,7 @@ class AgentLoop:
                 if action.tool_name == "finish":
                     if has_green_tests:
                         tool_result = self._dispatch(action)
-                        messages.append(_tool_result_message(action, tool_result))
+                        self._append_tool_result(messages, round_number, action, tool_result)
                         if tool_result.success:
                             record = _round_record(
                                 round_number,
@@ -173,21 +173,18 @@ class AgentLoop:
                                 _tool_failure_fingerprint(action, tool_result),
                                 "tool_error",
                             )
-                            plain_feedback = _plain_feedback_message(
-                                "tool_error",
-                                f"{action.tool_name}: "
-                                f"{tool_result.error or 'tool failed'}",
-                            )
                     else:
-                        messages.append(
-                            _tool_result_message(
-                                action,
-                                ToolResult(
-                                    success=False,
-                                    output={},
-                                    error="tests must pass before finish",
+                        self._append_tool_result(
+                            messages,
+                            round_number,
+                            action,
+                            ToolResult(
+                                success=False,
+                                output={},
+                                error=(
+                                    "finish_before_green: tests must pass before finish"
                                 ),
-                            )
+                            ),
                         )
                         record = _round_record(
                             round_number,
@@ -196,10 +193,12 @@ class AgentLoop:
                             _finish_before_green_fingerprint(action),
                             "finish_before_green",
                         )
-                        plain_feedback = _plain_feedback_message(
-                            "finish_before_green",
-                            "Run the tests until they pass before calling finish.",
-                        )
+                    self._append_skipped_tool_results(
+                        messages,
+                        round_number,
+                        actions[index + 1 :],
+                        "skipped after finish",
+                    )
                     break
 
                 if action.tool_name == "run_tests":
@@ -213,9 +212,14 @@ class AgentLoop:
                 tool_result = self._dispatch(action)
                 if _requires_approval(tool_result):
                     if self.approval_broker is None:
-                        messages.append(_tool_result_message(action, tool_result))
                         request = self.hitl_state.create(
                             action, self.config.hitl_timeout_seconds
+                        )
+                        self._append_tool_result(
+                            messages,
+                            round_number,
+                            action,
+                            _hitl_tool_result(request),
                         )
                         record = _round_record(
                             round_number,
@@ -224,9 +228,11 @@ class AgentLoop:
                             _hitl_failure_fingerprint(action, request.status.value),
                             "hitl_pending",
                         )
-                        plain_feedback = _plain_feedback_message(
-                            "hitl_pending",
-                            f"Action {action.tool_name} requires human approval.",
+                        self._append_skipped_tool_results(
+                            messages,
+                            round_number,
+                            actions[index + 1 :],
+                            "skipped while waiting for human approval",
                         )
                         break
 
@@ -238,8 +244,11 @@ class AgentLoop:
                     if request.status == HITLStatus.APPROVED:
                         tool_result = self._dispatch(action, approved=True)
                     else:
-                        messages.append(
-                            _tool_result_message(action, _hitl_tool_result(request))
+                        self._append_tool_result(
+                            messages,
+                            round_number,
+                            action,
+                            _hitl_tool_result(request),
                         )
                         strategy = _hitl_strategy(request)
                         record = _round_record(
@@ -249,13 +258,14 @@ class AgentLoop:
                             _hitl_failure_fingerprint(action, request.status.value),
                             strategy,
                         )
-                        plain_feedback = _plain_feedback_message(
-                            strategy,
-                            f"Action {action.tool_name} was not approved.",
+                        self._append_skipped_tool_results(
+                            messages,
+                            round_number,
+                            actions[index + 1 :],
+                            "skipped after human approval was not granted",
                         )
                         break
 
-                messages.append(_tool_result_message(action, tool_result))
                 if action.tool_name == "run_tests":
                     test_result = _test_result_from_tool_result(tool_result)
                     self._emit(
@@ -266,6 +276,7 @@ class AgentLoop:
                         test_status=_event_test_status(test_result),
                         summary=test_result.status,
                     )
+                    self._append_tool_result(messages, round_number, action, tool_result)
                     has_green_tests = test_result.status == "PASS"
                     record, feedback = self._record_from_test_result(
                         round_number,
@@ -274,8 +285,15 @@ class AgentLoop:
                     )
                     if test_result.status == "PASS":
                         continue
+                    self._append_skipped_tool_results(
+                        messages,
+                        round_number,
+                        actions[index + 1 :],
+                        "skipped after test failure",
+                    )
                     break
 
+                self._append_tool_result(messages, round_number, action, tool_result)
                 if not tool_result.success:
                     record = _round_record(
                         round_number,
@@ -284,9 +302,11 @@ class AgentLoop:
                         _tool_failure_fingerprint(action, tool_result),
                         "tool_error",
                     )
-                    plain_feedback = _plain_feedback_message(
-                        "tool_error",
-                        f"{action.tool_name}: {tool_result.error or 'tool failed'}",
+                    self._append_skipped_tool_results(
+                        messages,
+                        round_number,
+                        actions[index + 1 :],
+                        "skipped after tool failure",
                     )
                     break
                 self._record_output_file(action)
@@ -318,14 +338,43 @@ class AgentLoop:
                 )
                 return self.llm_client.chat(messages, tools)
             except LLMError as exc:
-                last_exception = exc
-                if not exc.retryable:
-                    raise
+                raise exc
             except Exception as exc:
                 last_exception = exc
         if last_exception is None:
             raise RuntimeError("LLM retry loop exited without an exception")
-        raise last_exception
+        raise LLMRequestError(
+            kind="llm_exception",
+            safe_message=f"LLM request failed: {last_exception.__class__.__name__}",
+            status_code=None,
+            retryable=True,
+            provider="unknown",
+        ) from last_exception
+
+    def _append_tool_result(
+        self,
+        messages: list[dict[str, Any]],
+        round_number: int,
+        action: Action,
+        result: ToolResult,
+    ) -> None:
+        messages.append(_tool_result_message(action, result))
+        self._emit_tool_completed(round_number, action, result)
+
+    def _append_skipped_tool_results(
+        self,
+        messages: list[dict[str, Any]],
+        round_number: int,
+        actions: list[Action],
+        reason: str,
+    ) -> None:
+        for action in actions:
+            self._append_tool_result(
+                messages,
+                round_number,
+                action,
+                _skipped_tool_result(reason),
+            )
 
     def _dispatch(self, action: Action, *, approved: bool = False) -> ToolResult:
         try:
@@ -428,6 +477,7 @@ class AgentLoop:
         hitl_decision: HITLDecision | None = None,
         stop_reason: str | None = None,
         metadata: dict[str, Any] | None = None,
+        tool_status: str | None = None,
     ) -> None:
         if self.event_sink is None:
             return
@@ -441,6 +491,7 @@ class AgentLoop:
                 phase=phase,
                 summary=summary,
                 tool_name=tool_name,
+                tool_status=tool_status,
                 test_status=test_status,
                 hitl_request_id=hitl_request_id,
                 hitl_decision=hitl_decision,
@@ -471,6 +522,22 @@ class AgentLoop:
             hitl_request_id=request.request_id,
             hitl_decision=_event_hitl_decision(request),
             summary=request.status.value,
+        )
+
+    def _emit_tool_completed(
+        self,
+        round_number: int,
+        action: Action,
+        result: ToolResult,
+    ) -> None:
+        self._emit(
+            RunEventType.TOOL_COMPLETED,
+            round_index=round_number,
+            phase=RunPhase.RUNNING,
+            tool_name=action.tool_name,
+            tool_status=_tool_status(result),
+            summary=_tool_result_summary(result),
+            metadata={"success": result.success},
         )
 
 
@@ -544,11 +611,35 @@ def _tool_result_message(action: Action, result: ToolResult) -> dict[str, Any]:
 
 
 def _hitl_tool_result(request: HITLRequest) -> ToolResult:
+    strategy = _hitl_strategy(request)
     return ToolResult(
         success=False,
-        output={"status": request.status.value, "decision": request.decision},
-        error=f"HITL {request.status.value.lower()}",
+        output={
+            "status": request.status.value,
+            "decision": request.decision,
+            "strategy": strategy,
+        },
+        error=f"{strategy}: HITL {request.status.value.lower()}",
     )
+
+
+def _skipped_tool_result(reason: str) -> ToolResult:
+    return ToolResult(success=False, output={"status": "SKIPPED"}, error=reason)
+
+
+def _tool_status(result: ToolResult) -> str:
+    status = result.output.get("status")
+    if isinstance(status, str) and status:
+        return status.lower()
+    return "success" if result.success else "error"
+
+
+def _tool_result_summary(result: ToolResult) -> str:
+    if result.success:
+        return "success"
+    if result.error:
+        return result.error
+    return "tool failed"
 
 
 def _action_from_tool_call(tool_call: ToolCall) -> Action:

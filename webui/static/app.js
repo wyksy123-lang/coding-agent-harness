@@ -225,7 +225,7 @@ function eventMeta(event) {
     parts.push(event.hitl_decision === "approved" ? "已批准" : "已拒绝");
   }
   if (event.stop_reason) {
-    parts.push(`Stop reason: ${event.stop_reason}`);
+    parts.push(`停止原因：${event.stop_reason}`);
   }
   return parts.join(" · ");
 }
@@ -290,10 +290,10 @@ function renderHitl(requests) {
     item.className = "hitl-item";
 
     const title = document.createElement("h3");
-    const requestId = valueOrFallback(hitlRequest.request_id, "unknown-request");
+    const requestId = valueOrFallback(hitlRequest.request_id, "未知请求");
     const action =
       hitlRequest.action && typeof hitlRequest.action === "object" ? hitlRequest.action : {};
-    title.textContent = `${valueOrFallback(action.tool_name, "tool")} - ${requestId}`;
+    title.textContent = `${valueOrFallback(action.tool_name, "工具")} - ${requestId}`;
 
     const args = document.createElement("pre");
     args.textContent = JSON.stringify(sanitizeForDisplay("args", action.args || {}), null, 2);

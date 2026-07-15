@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 import httpx
@@ -17,6 +18,18 @@ _API_URL = "https://api.deepseek.com/chat/completions"
 _PROVIDER = "deepseek"
 _RETRY_STATUS_CODES = frozenset({408, 429, 500, 502, 503, 504})
 _NON_RETRY_STATUS_CODES = frozenset({400, 401, 402, 403, 404, 422})
+_HIGH_CONFIDENCE_SECRET_RE = re.compile(
+    r"(s[k]-[A-Za-z0-9_-]+|AKIA[0-9A-Z]{16}|BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY)"
+)
+_SENSITIVE_CONTENT_RE = re.compile(
+    r"\b(api[_-]?key|authorization|token|secret|password)\b"
+    r"\s*[:=]\s*(?:Bearer\s+)?\S+",
+    re.IGNORECASE,
+)
+_BEARER_SECRET_RE = re.compile(r"\bBearer\s+\S+", re.IGNORECASE)
+_WINDOWS_USER_PATH_RE = re.compile(r"C:\\Users\\\S+", re.IGNORECASE)
+_ENV_FILE_RE = re.compile(r"\S*\.env\S*", re.IGNORECASE)
+_ABSOLUTE_PATH_RE = re.compile(r"([A-Za-z]:\\\S+|\\\\\S+|/\S+)")
 
 
 class DeepSeekClient(LLMClient):
@@ -96,7 +109,7 @@ class DeepSeekClient(LLMClient):
         for _ in range(self._retry_count + 1):
             try:
                 response = self._client.post(_API_URL, headers=headers, json=body)
-            except (httpx.ConnectError, httpx.ConnectTimeout, httpx.ReadTimeout) as exc:
+            except httpx.RequestError as exc:
                 last_exception = _request_error(
                     kind="network_error",
                     safe_message=f"DeepSeek request failed: {exc.__class__.__name__}",
@@ -277,6 +290,13 @@ def _response_error(kind: str, safe_message: str) -> LLMResponseError:
 
 def _sanitize_message(message: str) -> str:
     redacted = message.replace("\r", " ").replace("\n", " ")
-    if "Authorization" in redacted:
-        redacted = redacted.replace("Authorization", "[redacted]")
+    redacted = _HIGH_CONFIDENCE_SECRET_RE.sub("[redacted]", redacted)
+    redacted = _SENSITIVE_CONTENT_RE.sub(
+        lambda match: f"{match.group(1)}=[redacted]",
+        redacted,
+    )
+    redacted = _BEARER_SECRET_RE.sub("[redacted]", redacted)
+    redacted = _WINDOWS_USER_PATH_RE.sub("[redacted]", redacted)
+    redacted = _ENV_FILE_RE.sub("[redacted]", redacted)
+    redacted = _ABSOLUTE_PATH_RE.sub("[redacted]", redacted)
     return redacted[:300]

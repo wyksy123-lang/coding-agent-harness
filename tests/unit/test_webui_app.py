@@ -77,6 +77,12 @@ def test_static_frontend_assets_are_served() -> None:
     assert "第 ${event.round_index} 轮" in app_js.text
     assert "任务结束" in app_js.text
     assert "model_error" in app_js.text
+    assert "Stop reason:" not in app_js.text
+    assert "unknown-request" not in app_js.text
+    assert '"tool"' not in app_js.text
+    assert "停止原因：" in app_js.text
+    assert "未知请求" in app_js.text
+    assert "工具" in app_js.text
     assert "模型错误" in app_js.text
     assert "slice(-20)" not in app_js.text
     assert ".textContent" in app_js.text
