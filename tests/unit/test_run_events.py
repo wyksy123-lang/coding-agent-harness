@@ -132,6 +132,35 @@ def test_tests_and_finish_events_update_snapshot_semantics() -> None:
     assert snapshot["stop_reason"] == "PASS"
 
 
+def test_model_error_event_sets_failed_snapshot_with_safe_failure_details() -> None:
+    snapshot = apply_event_to_snapshot(
+        None,
+        RunEvent(
+            event_id="evt-1",
+            run_id="run-1",
+            event_type=RunEventType.MODEL_ERROR,
+            phase=RunPhase.FAILED,
+            stop_reason="LLM_ERROR",
+            summary="DeepSeek rejected the request with HTTP 400: invalid tool schema",
+            metadata={
+                "failure_type": "LLM_API_ERROR",
+                "failure_details": "DeepSeek rejected the request with HTTP 400: invalid tool schema",
+            },
+        ),
+    )
+
+    assert snapshot["phase"] == "failed"
+    assert snapshot["status"] == "Failed"
+    assert snapshot["stop_reason"] == "LLM_ERROR"
+    assert snapshot["failure_type"] == "LLM_API_ERROR"
+    assert snapshot["failure_details"] == [
+        {
+            "message": "DeepSeek rejected the request with HTTP 400: invalid tool schema"
+        }
+    ]
+    assert snapshot["test_status"] == "not_started"
+
+
 def test_run_event_metadata_sanitizer_redacts_secrets_headers_env_and_paths() -> None:
     metadata = {
         "api_key": "sk-test-secret",

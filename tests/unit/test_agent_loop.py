@@ -296,6 +296,69 @@ def test_run_publishes_lifecycle_events_for_passing_test_round(tmp_path: Path) -
     assert events[-1].stop_reason == "PASS"
 
 
+def test_run_preserves_assistant_tool_calls_and_tool_results_for_next_request(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path)
+    llm = SequencedLLM(
+        [
+            _response("write_file", {"path": "created.py", "content": "x = 1"}),
+            _response("run_tests"),
+        ]
+    )
+    run_tests = SequencedRunTestsTool(tmp_path, [_pytest_report(0)])
+    registry = ToolRegistry(config)
+    registry.register(WriteFileToolDouble(success=True))
+    registry.register(run_tests)
+    loop = AgentLoop(config, llm, registry)
+
+    result = loop.run("write then test")
+
+    assert result.status == StopReason.PASS
+    second_messages = llm.messages_seen[1]
+    assert second_messages[-2]["role"] == "assistant"
+    assert second_messages[-2]["tool_calls"][0]["id"] == "call-write_file"
+    assert second_messages[-2]["tool_calls"][0]["function"]["name"] == "write_file"
+    assert second_messages[-1]["role"] == "tool"
+    assert second_messages[-1]["tool_call_id"] == "call-write_file"
+    tool_payload = json.loads(second_messages[-1]["content"])
+    assert tool_payload["success"] is True
+
+
+def test_llm_api_error_emits_model_error_and_single_finished_event(
+    tmp_path: Path,
+) -> None:
+    from harness.llm import base as llm_base
+
+    config = _config(tmp_path)
+    error = llm_base.LLMRequestError(
+        kind="http_400",
+        safe_message="DeepSeek rejected the request with HTTP 400: invalid tool schema",
+        status_code=400,
+        retryable=False,
+        provider="deepseek",
+    )
+    llm = SequencedLLM([error])
+    events: list[Any] = []
+    loop = AgentLoop(config, llm, ToolRegistry(config), event_sink=events.append)
+
+    result = loop.run("fail safely")
+
+    assert result.status == StopReason.LLM_ERROR
+    assert [event.event_type for event in events] == [
+        RunEventType.TASK_STARTED,
+        RunEventType.ROUND_STARTED,
+        RunEventType.MODEL_REQUESTED,
+        RunEventType.MODEL_ERROR,
+        RunEventType.RUN_FINISHED,
+    ]
+    assert events[-2].summary == error.safe_message
+    assert events[-1].stop_reason == "LLM_ERROR"
+    assert len(
+        [event for event in events if event.event_type == RunEventType.RUN_FINISHED]
+    ) == 1
+
+
 def test_run_executes_approved_command_once_then_continues(tmp_path: Path) -> None:
     config = _config(tmp_path)
     llm = SequencedLLM(

@@ -18,6 +18,8 @@ def test_webui_state_starts_idle_without_running_stop_reason() -> None:
     assert snapshot["phase"] == "idle"
     assert snapshot["status"] == "Not started"
     assert snapshot["stop_reason"] is None
+    assert snapshot["test_status"] == "not_started"
+    assert snapshot["test_summary"] == {"passed": None, "failed": None}
     assert snapshot["timeline"] == []
     assert snapshot["pending_hitl"] == []
 
@@ -51,6 +53,30 @@ def test_webui_state_publish_updates_snapshot_and_timeline_in_order() -> None:
     assert snapshot["status"] == "Completed"
     assert snapshot["stop_reason"] == "PASS"
     assert [event["event_id"] for event in snapshot["timeline"]] == ["evt-1", "evt-2"]
+
+
+def test_webui_state_keeps_full_timeline_for_reconnect() -> None:
+    state = WebUIState(mode="live", run_id="run-1")
+    for index in range(25):
+        state.publish(
+            RunEvent(
+                event_id=f"evt-{index}",
+                run_id="run-1",
+                event_type=RunEventType.ROUND_STARTED,
+                round_index=index,
+                phase=RunPhase.RUNNING,
+                summary=f"Round {index}",
+            )
+        )
+
+    client = TestClient(create_app(state=state, mode="live"))
+
+    with client.websocket_connect("/ws") as websocket:
+        first = websocket.receive_json()
+
+    assert len(first["timeline"]) == 25
+    assert first["timeline"][0]["event_id"] == "evt-0"
+    assert first["timeline"][-1]["event_id"] == "evt-24"
 
 
 def test_websocket_sends_snapshot_first_then_incremental_event() -> None:

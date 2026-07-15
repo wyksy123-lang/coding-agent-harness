@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import json
 from dataclasses import is_dataclass
 from typing import Any
 
@@ -535,6 +536,42 @@ class TestToolRegistryGetSchemas:
         schemas = registry.get_schemas()
         assert len(schemas) == 1
         assert schemas[0] == _CustomNameTool("echo").schema
+
+    def test_get_llm_schemas_wraps_tools_as_chat_completion_functions(self):
+        registry = ToolRegistry(_test_config(enabled_tools=["echo", "noop"]))
+        registry.register(_EchoTool())
+        registry.register(_NoOpTool())
+
+        schemas = registry.get_llm_schemas()
+
+        assert schemas == [
+            {
+                "type": "function",
+                "function": {
+                    "name": "echo",
+                    "description": "echo",
+                    "parameters": _EchoTool().schema,
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "noop",
+                    "description": "noop",
+                    "parameters": _NoOpTool().schema,
+                },
+            },
+        ]
+
+    def test_get_llm_schemas_omits_disabled_tools_and_is_json_serializable(self):
+        registry = ToolRegistry(_test_config(enabled_tools=["echo"]))
+        registry.register(_EchoTool())
+        registry.register(_NoOpTool())
+
+        schemas = registry.get_llm_schemas()
+
+        assert [schema["function"]["name"] for schema in schemas] == ["echo"]
+        assert json.dumps(schemas)
 
 
 class TestToolRegistryEdgeCases:

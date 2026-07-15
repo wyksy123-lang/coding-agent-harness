@@ -36,12 +36,13 @@ class FakeCredentials:
 
 
 class FakeAgentLoop:
-    def __init__(self) -> None:
+    def __init__(self, status: StopReason = StopReason.PASS) -> None:
         self.requirements: list[str] = []
+        self._status = status
 
     def run(self, requirement: str) -> AgentResult:
         self.requirements.append(requirement)
-        return AgentResult(status=StopReason.PASS, rounds=[], output_files=[])
+        return AgentResult(status=self._status, rounds=[], output_files=[])
 
 
 def test_run_loads_config_and_invokes_agent_loop_with_requested_file(
@@ -178,6 +179,24 @@ def test_run_without_key_suggests_setup_and_does_not_load_config(
     assert not agent_loop_called
 
 
+def test_run_returns_nonzero_for_llm_error_without_traceback(capsys: Any) -> None:
+    exit_code = main(
+        ["run", "fail safely"],
+        dependencies=CLIDependencies(
+            load_config=lambda _path: Config(),
+            make_credentials=lambda: FakeCredentials(key="fake-live-key"),
+            make_agent_loop=lambda _config, _api_key: FakeAgentLoop(
+                status=StopReason.LLM_ERROR
+            ),
+        ),
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "LLM_ERROR" in captured.out
+    assert "Traceback" not in captured.err
+
+
 def test_key_status_prints_masked_status(capsys: Any) -> None:
     credentials = FakeCredentials(status_value="fake-****...1234")
 
@@ -225,3 +244,24 @@ def test_default_tool_registry_exposes_finish_tool(tmp_path: Path) -> None:
         {"name": "finish", "type": "object", "properties": {}, "required": []}
     ]
     assert registry.dispatch(Action(tool_name="finish", args={})).success is True
+
+
+def test_default_tool_registry_exposes_finish_as_llm_function_tool(tmp_path: Path) -> None:
+    registry = build_tool_registry(Config(target_directory=str(tmp_path)))
+
+    finish_schemas = [
+        schema
+        for schema in registry.get_llm_schemas()
+        if schema["function"]["name"] == "finish"
+    ]
+
+    assert finish_schemas == [
+        {
+            "type": "function",
+            "function": {
+                "name": "finish",
+                "description": "finish",
+                "parameters": {"type": "object", "properties": {}, "required": []},
+            },
+        }
+    ]
