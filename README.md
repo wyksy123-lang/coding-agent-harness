@@ -135,6 +135,27 @@ docker run -p 8000:8000 -v $(pwd)/workspace:/app/workspace coding-agent-harness
 
 Docker must be installed and available on `PATH` for the Docker commands.
 
+## Render deployment
+
+`render.yaml` defines a Render Docker Web Service that builds from the repository
+root with `./Dockerfile`. The service uses the free plan, checks `/` as its health
+check path, and starts deployment only after repository checks pass.
+
+The container runs Uvicorn on `0.0.0.0` and reads Render's `PORT` environment
+variable with a local fallback to `8000`. The `/` health check is the WebUI index
+route served by FastAPI.
+
+Set `DEEPSEEK_API_KEY` in Render as a secret environment variable. The blueprint
+marks it with `sync: false`; no real API key, token, or password is stored in this
+repository or baked into the image.
+
+CI/CD flow: push a task branch, wait for GitHub Actions checks to pass, merge to
+`main`, then let Render deploy the checked revision from the Dockerfile. Free Render
+services may sleep when idle and need a browser refresh or request to wake.
+
+Live deployment pending: this repository contains the Render configuration, but a
+public Render service URL has not been verified in this stage.
+
 ## 目录结构
 
 ```text

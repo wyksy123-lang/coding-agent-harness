@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: coding-agent-harness
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: DEEPSEEK_API_KEY
+        sync: false
