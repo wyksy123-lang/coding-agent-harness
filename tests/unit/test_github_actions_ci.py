@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import tomllib
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 
@@ -10,7 +10,7 @@ WORKFLOW_PATH = Path(".github/workflows/ci.yml")
 PYPROJECT_PATH = Path("pyproject.toml")
 
 
-def _load_workflow() -> dict[str, Any]:
+def _load_workflow() -> dict[Any, Any]:
     with WORKFLOW_PATH.open(encoding="utf-8") as workflow_file:
         loaded = yaml.safe_load(workflow_file)
     assert isinstance(loaded, dict)
@@ -20,7 +20,7 @@ def _load_workflow() -> dict[str, Any]:
 def test_github_actions_workflow_triggers_on_push_and_main_pr() -> None:
     workflow = _load_workflow()
 
-    triggers = workflow.get("on", workflow.get(True))
+    triggers = cast(dict[str, Any], workflow.get("on", workflow.get(True)))
 
     assert "push" in triggers
     assert triggers["push"] is None
