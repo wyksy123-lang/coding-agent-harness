@@ -124,10 +124,13 @@ class ToolRegistry:
         return tool.execute(action.args)
 
     def get_schemas(self) -> list[dict[str, Any]]:
-        """Return the schemas of all registered tools.
+        """Return raw parameter schemas for legacy/internal callers.
+
+        These raw schemas are not Chat Completions tool definitions and must
+        not be passed directly to OpenAI/DeepSeek APIs.
 
         Returns:
-            A list of JSON schema dictionaries.
+            A list of JSON schema dictionaries describing tool arguments.
         """
         return [tool.schema for tool in self._tools.values()]
 

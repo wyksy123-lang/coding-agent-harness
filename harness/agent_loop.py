@@ -330,12 +330,7 @@ class AgentLoop:
         last_exception: Exception | None = None
         for _ in range(attempts):
             try:
-                get_llm_schemas = getattr(self.tool_registry, "get_llm_schemas", None)
-                tools = (
-                    get_llm_schemas()
-                    if callable(get_llm_schemas)
-                    else self.tool_registry.get_schemas()
-                )
+                tools = self.tool_registry.get_llm_schemas()
                 return self.llm_client.chat(messages, tools)
             except LLMError as exc:
                 raise exc

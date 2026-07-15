@@ -87,12 +87,12 @@ class DeepSeekClient(LLMClient):
             An :class:`LLMResponse` with the parsed reply.
 
         Raises:
-            httpx.ConnectError: If the connection fails after all retries.
-            httpx.ReadTimeout: If the read times out after all retries.
-            httpx.HTTPStatusError: If the API returns a retriable status
-                (500/429) after all retries, or any non-200 status that is
-                not retried (e.g. 401, 403, 400).
+            LLMRequestError: If the tool schema is invalid, the request fails
+                after retries, or the provider rejects the request.
+            LLMResponseError: If a successful provider response cannot be
+                parsed safely.
         """
+        _validate_tool_schemas(tools)
         headers = {
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
@@ -218,6 +218,38 @@ class DeepSeekClient(LLMClient):
             finish_reason=finish_reason,
             tool_calls=tool_calls,
         )
+
+
+def _validate_tool_schemas(tools: list[dict[str, Any]]) -> None:
+    for tool in tools:
+        if not _is_chat_completion_function_tool(tool):
+            raise _request_error(
+                kind="invalid_tool_schema",
+                safe_message=(
+                    "LLM tool definitions are not in Chat Completions "
+                    "function format."
+                ),
+                status_code=None,
+                retryable=False,
+            )
+
+
+def _is_chat_completion_function_tool(tool: Any) -> bool:
+    if not isinstance(tool, dict):
+        return False
+    if tool.get("type") != "function":
+        return False
+    function = tool.get("function")
+    if not isinstance(function, dict):
+        return False
+    name = function.get("name")
+    if not isinstance(name, str) or not name.strip():
+        return False
+    description = function.get("description")
+    if not isinstance(description, str) or not description.strip():
+        return False
+    parameters = function.get("parameters")
+    return isinstance(parameters, dict) and parameters.get("type") == "object"
 
 
 def _request_error_for_response(
