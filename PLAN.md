@@ -1091,6 +1091,52 @@ T29 (final acceptance) ← depends on all
 
 ---
 
+## T32: DeepSeek Flash / Pro runtime model switch
+
+1. **TASK ID**: T32
+2. **Goal**: Let users choose DeepSeek Flash or DeepSeek Pro for a single `harness run` invocation with a small CLI-only override.
+3. **Dependencies**: T31 merged into latest `main` at `d9aa644`; T32 branch started from that commit.
+4. **Files touched**:
+   - `harness/cli.py`
+   - `tests/unit/test_cli.py`
+   - `README.md`
+   - `PLAN.md`
+   - `REQUIREMENTS_CHECKLIST.md`
+   - `AGENT_LOG.md`
+5. **Implementation points**:
+   - Added `harness run --model {flash,pro}` only on the `run` subcommand.
+   - Centralized aliases in `_DEEPSEEK_MODEL_ALIASES`: `flash -> deepseek-v4-flash`, `pro -> deepseek-v4-pro`.
+   - Loaded config is copied with `dataclasses.replace(...)` when an override is present; `harness.yaml` is not written or mutated.
+   - Normal AgentLoop and local `--web` paths both receive the effective per-run config.
+   - CLI output preserves the existing `status:` line first and then prints `model: <effective model>` without API keys or authorization values.
+6. **Evidence commits**:
+   - Red: `9879939` (`test(T32): define CLI model override behavior [subagent: Nash; human: pending review]`)
+   - Green: `c4b03b6` (`feat(T32): add per-run DeepSeek model override [subagent: Nash; human: pending review]`)
+   - Refactor/Review: `a46b402` (`refactor(T32): complete model override review fixes [subagent: Sartre/Herschel; human: pending review]`)
+   - Docs: pending this evidence commit
+7. **Review evidence**:
+   - Prep subagent Nash (`019f6607-f24c-7cb3-92c0-56fe6cba12b9`) confirmed the minimal CLI seam and warned not to touch DeepSeekClient, credentials, WebUI UI, or user-local files.
+   - Specification review subagent Sartre (`019f660e-ac74-7552-9e06-9830eb6ccd2c`) found no Critical, Important, or Minor spec findings.
+   - Code quality review subagent Herschel (`019f660e-dce7-7bb1-8970-4b2b442094ac`) found one Important stdout-order regression and one Minor call-count test gap; both were fixed before the review commit.
+8. **Verification**:
+   - Baseline target before T32 tests: `& $PY -m pytest tests/unit/test_cli.py -q` -> 10 passed.
+   - Red command: `& $PY -m pytest tests/unit/test_cli.py -q` -> 8 failed, 10 passed. Failures were expected missing `--model` behavior: unrecognized option, missing alias choices, missing effective model output, and missing normal/WebUI override propagation.
+   - Green target: `& $PY -m pytest tests/unit/test_cli.py -q` -> 18 passed.
+   - Related regression after review fix: `& $PY -m pytest tests/unit/test_cli.py tests/unit/test_llm_deepseek.py tests/unit/test_local_web_runner.py -q` -> 91 passed.
+   - README check after documentation update: `& $PY -m pytest tests/unit/test_readme.py -q` -> 4 passed.
+   - Full suite: `& $PY -m pytest tests/ -q` -> 896 passed, 5 skipped, 1 warning.
+   - Ruff: `& $PY -m ruff check harness/ webui/ demo/ tests/` -> All checks passed.
+   - Mypy: `& $PY -m mypy harness/ webui/ demo/` -> Success, no issues in 36 source files; existing unused `tests.*` override note.
+   - Pip check: `& $PY -m pip check` -> No broken requirements found.
+   - `git diff --check` -> no whitespace errors.
+   - `& .\.venv\Scripts\harness.exe run --help` -> help includes `--model {flash,pro}`.
+   - Tracked-file high-confidence credential scan found only the existing explicit fake key fixture/log references (`sk-fake-test-key-not-real`), no real credentials.
+9. **Manual smoke**:
+   - Real Flash/Pro DeepSeek smoke was not executed during automated T32 verification to avoid real LLM/API usage and cost. Users with a configured key can manually run `harness run "..." --model flash` and `harness run "..." --model pro`.
+10. **Status**: DONE locally; stop before push/PR.
+
+---
+
 ## 验证命令汇总
 
 | 命令 | 用途 |

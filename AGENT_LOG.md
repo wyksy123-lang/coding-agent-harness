@@ -4793,3 +4793,75 @@
   - `git diff --check` -> no whitespace errors.
   - `& $PY -m harness.cli key status` -> `not configured`; real DeepSeek smoke skipped, no real key read or printed.
 - Generated `.harness/memory.json` from verification was removed after confirming the `.harness` path was inside the repo. Pre-existing untracked `harness.yaml` and `workspace/` were left untouched.
+
+---
+
+## LOG-061 - T32 DeepSeek Flash / Pro runtime model switch
+
+**Timestamp**: 2026-07-15
+**Environment**: Windows Codex checkout, project venv `./.venv/Scripts/python.exe`, Python 3.11.15
+**Branch**: `codex/task/T32-cli-model-switch`
+**Task**: T32 - add DeepSeek Flash / Pro runtime model switch and final repository-use documentation
+**Status**: local implementation and docs in progress; stop before push/PR
+
+**Start-state checks**:
+- Initial checkout was on `main` at `6574138`, behind `origin/main` by 8 commits, with untracked `.harness/`, `harness.yaml`, and `workspace/`.
+- Fast-forwarded `main` to `d9aa644` (`Merge pull request #37 ... T31`) before branching, satisfying the T31-merged precondition.
+- Created branch `codex/task/T32-cli-model-switch` from `d9aa644`.
+- Repository root: `C:/Users/裴斐/Documents/coding-agent-harness-codex`.
+- Python: `.venv\Scripts\python.exe`, Python `3.11.15`.
+- User-local `.harness/`, `harness.yaml`, and `workspace/` were not read, staged, or modified.
+
+**Scope**:
+- Implemented only `harness run --model {flash,pro}` as a CLI-level per-run override.
+- Mapping is `flash -> deepseek-v4-flash` and `pro -> deepseek-v4-pro`.
+- No provider refactor, API base change, CredentialManager change, DeepSeekClient change, WebUI UI change, HITL change, Docker/Render change, or `REFLECTION.md` edit was made.
+- README was updated so a fresh clone user can understand install, run, Flash/Pro selection, local WebUI review, repository file categories, and non-deliverable local runtime files.
+
+**Subagents**:
+- Prep subagent Nash (`019f6607-f24c-7cb3-92c0-56fe6cba12b9`), read-only. Key finding: T32 can be implemented in `harness/cli.py` with `argparse` choices, `dataclasses.replace`, and no DeepSeekClient/WebUI/provider changes.
+- Specification review subagent Sartre (`019f660e-ac74-7552-9e06-9830eb6ccd2c`), read-only. Result: no Critical, Important, or Minor specification findings.
+- Code quality review subagent Herschel (`019f660e-dce7-7bb1-8970-4b2b442094ac`), read-only. Findings: preserve existing `status:`-first stdout ordering and tighten tests to assert exactly one factory/WebUI call. Both were fixed before the review commit.
+
+**Baseline and Red evidence**:
+- Baseline target before T32 tests: `& $PY -m pytest tests/unit/test_cli.py -q` -> 10 passed.
+- Red commit `9879939`: `test(T32): define CLI model override behavior [subagent: Nash; human: pending review]`.
+- Red command: `& $PY -m pytest tests/unit/test_cli.py -q`.
+- Red result: 8 failed, 10 passed. Failures were expected missing T32 behavior: `--model` unrecognized, invalid model error lacked choices, no effective model output, and normal/WebUI paths did not receive overridden model config.
+
+**Green evidence**:
+- Green commit `c4b03b6`: `feat(T32): add per-run DeepSeek model override [subagent: Nash; human: pending review]`.
+- Implemented `_DEEPSEEK_MODEL_ALIASES`, `run_parser.add_argument("--model", choices=("flash", "pro"))`, per-run `replace(config, model=...)`, and effective model output.
+- Target green: `& $PY -m pytest tests/unit/test_cli.py -q` -> 18 passed.
+- Related regression: `& $PY -m pytest tests/unit/test_cli.py tests/unit/test_llm_deepseek.py tests/unit/test_local_web_runner.py -q` -> 91 passed.
+
+**Refactor/review evidence**:
+- Review commit `a46b402`: `refactor(T32): complete model override review fixes [subagent: Sartre/Herschel; human: pending review]`.
+- Fixed stdout order so `status:` remains the first final output line, then `model: <effective model>`.
+- Added exact call-count assertions for new normal/WebUI model override tests.
+- Post-review checks:
+  - `& $PY -m pytest tests/unit/test_cli.py tests/unit/test_llm_deepseek.py tests/unit/test_local_web_runner.py -q` -> 91 passed.
+  - `& $PY -m ruff check harness/cli.py tests/unit/test_cli.py` -> All checks passed.
+  - `& $PY -m mypy harness/cli.py` -> Success, no issues in 1 source file; existing unused `tests.*` override note.
+
+**Documentation evidence**:
+- README now documents default config model behavior, `--model flash`, `--model pro`, `--model ... --web`, alias mappings, per-run-only semantics, unchanged credential behavior, and a categorized repository layout with non-deliverable local runtime files.
+- README check: `& $PY -m pytest tests/unit/test_readme.py -q` -> 4 passed.
+- PLAN.md and REQUIREMENTS_CHECKLIST.md record T32 as the final runtime-selector task and R067 as the traceability row.
+
+**Final verification**:
+- `& $PY -m pytest tests/ -q` -> 896 passed, 5 skipped, 1 warning.
+- `& $PY -m ruff check harness/ webui/ demo/ tests/` -> All checks passed.
+- `& $PY -m mypy harness/ webui/ demo/` -> Success, no issues in 36 source files; existing unused `tests.*` override note.
+- `& $PY -m pip check` -> No broken requirements found.
+- `git diff --check` -> no whitespace errors.
+- `& .\.venv\Scripts\harness.exe run --help` -> displayed `--model {flash,pro}` and the expected help text.
+- Tracked-file high-confidence credential scan found only the existing explicit fake key fixture/log references (`sk-fake-test-key-not-real`), no real credentials.
+- `git status --short` showed only tracked T32 docs pending plus untracked user-local `.harness/`, `harness.yaml`, and `workspace/`; those user-local paths remained unstaged.
+
+**Manual smoke**:
+- Real Flash/Pro DeepSeek smoke was not executed during automated T32 verification to avoid real LLM/API usage and cost. Users with a configured key can manually verify `harness run "..." --model flash` and `harness run "..." --model pro`.
+
+**Safety and remaining manual checks**:
+- No push, merge, force-push, remote branch modification, real LLM call, real API key/token/password readout, credential file edit, `harness.yaml` edit, `workspace/` edit, `.harness/` edit, or `REFLECTION.md` edit was performed.
+- Human-owned external actions remain: push this branch, open the PR, wait for remote CI, and supply any required NJU/GitLab submission URL/evidence.

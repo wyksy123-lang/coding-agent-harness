@@ -116,10 +116,25 @@ Run the harness against a natural-language requirement:
 harness run "add a slugify helper with tests"
 ```
 
+By default, `harness run` uses the `model` value from `harness.yaml`. For a
+single run, choose one of the supported DeepSeek runtime aliases:
+
+```powershell
+harness run "add a slugify helper with tests" --model flash
+harness run "add a more complex parser with tests" --model pro
+```
+
+`--model flash` maps to `deepseek-v4-flash`; `--model pro` maps to
+`deepseek-v4-pro`. The override applies only to the current process, does not
+write back to `harness.yaml`, and continues to use the same DeepSeek API key
+configured by `harness key setup`. Invalid model aliases are rejected by
+argparse before the harness loads config or starts an AgentLoop.
+
 Run the same real AgentLoop with the local WebUI attached:
 
 ```powershell
 harness run "add a slugify helper with tests" --web
+harness run "add a slugify helper with tests" --model flash --web
 ```
 
 The local WebUI binds only to `http://127.0.0.1:8000/`. It streams the live
@@ -227,34 +242,46 @@ Live deployment verified:
 
 ```text
 .
-|-- harness/
-|   |-- agent_loop.py
-|   |-- cli.py
-|   |-- config/
-|   |-- credentials/
-|   |-- feedback/
-|   |-- governance/
-|   |-- llm/
-|   |-- memory/
-|   `-- tools/
-|-- webui/
+|-- harness/                         # package source
+|   |-- agent_loop.py                 # TDD loop orchestration
+|   |-- cli.py                        # `harness` CLI, key commands, run entrypoint
+|   |-- config/                       # YAML config loader
+|   |-- credentials/                  # keyring/.env credential manager
+|   |-- feedback/                     # pytest parsing, classification, injection
+|   |-- governance/                   # path, command, and HITL guards
+|   |-- llm/                          # LLM protocol, mock client, DeepSeek client
+|   |-- memory/                       # JSON memory retrieval/recording
+|   |-- run_events.py                 # event model shared by AgentLoop and WebUI
+|   `-- tools/                        # file, shell, test, and finish tools
+|-- webui/                            # FastAPI backend and local live UI
 |   |-- app.py
+|   |-- local_runner.py
+|   |-- state.py
 |   |-- websocket.py
-|   `-- static/
-|-- demo/
-|   `-- run_demo.py
+|   `-- static/                       # browser assets
+|-- demo/                             # deterministic mock mechanism demo
 |-- tests/
-|   |-- unit/
-|   |-- mock/
+|   |-- unit/                         # deterministic unit tests
+|   |-- mock/                         # mock-LLM integration/mechanism tests
+|   |-- smoke/                        # fresh-install smoke helper
 |   `-- fixtures/
-|-- Dockerfile
-|-- harness.yaml.example
-|-- pyproject.toml
-|-- SPEC.md
-|-- PLAN.md
-|-- REQUIREMENTS_CHECKLIST.md
-`-- AGENT_LOG.md
+|-- docs/                             # internal design and task evidence notes
+|-- Dockerfile                        # container distribution
+|-- render.yaml                       # Render Docker Web Service blueprint
+|-- harness.yaml.example              # copy to local `harness.yaml`
+|-- pyproject.toml                    # package metadata and tool config
+|-- SPEC.md                           # approved project specification
+|-- PLAN.md                           # task plan and completion evidence
+|-- SPEC_PROCESS.md                   # brainstorming/cold-start process record
+|-- REQUIREMENTS_CHECKLIST.md         # course requirement traceability matrix
+|-- AGENT_LOG.md                      # chronological task log
+`-- CODEX_MODE.md                     # current completion-mode instructions
 ```
+
+Local runtime files are intentionally outside the deliverable set: do not commit
+`harness.yaml`, `.env`, `.harness/`, `workspace/`, virtual environments, real API
+keys, or generated build artifacts unless a release process explicitly asks for
+them.
 
 ## 安全边界
 
@@ -302,8 +329,15 @@ completions shape. Real LLM runs require a configured API key and network access
 If `harness key status` reports `not configured`, controlled real DeepSeek smoke
 checks are skipped rather than simulated.
 
+The Flash/Pro selector is a CLI alias layer only. It does not add providers,
+change the DeepSeek API URL, change credentials, or persist any model choice.
+
 Docker commands require a local Docker runtime. Container image publishing and cloud
 deployment are separate release steps.
 
 The README includes T28 Render deployment evidence, but final acceptance results
 remain separate and belong to the final acceptance task.
+
+Course-submission evidence that depends on external services remains human-owned:
+push the final branch, open the PR, wait for remote CI, and provide the NJU/GitLab
+submission URL when required by the course platform.

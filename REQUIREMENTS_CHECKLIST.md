@@ -279,3 +279,11 @@
 | R066 | T31 user prompt | Real DeepSeek tool calling must use the Chat Completions function-tool schema, every assistant tool call must receive a matching `role=tool` result, provider/malformed-response failures must become safe `LLM_ERROR` outcomes, and the local WebUI must show failed-run timeline/status details without leaking credentials or paths. | PLAN.md T31; README.md DeepSeek protocol/error note; AGENT_LOG.md LOG-060 | Red/Green/Review commits; targeted DeepSeek/AgentLoop/WebUI/CLI tests; full pytest/Ruff/Mypy/pip check; build/twine/demo; credential scan; controlled real smoke gate; production-path MockTransport HTTP body capture | DONE (`888 passed, 5 skipped`; production-path target suite `158 passed`; Ruff/Mypy/pip/build/twine/demo passed; `rg get_schemas` shows no AgentLoop/LLM/WebUI production call; MockTransport contract check printed `Actual HTTP tool contract: PASS`; current-tree scan only found fake fixture/log strings; real DeepSeek smoke skipped because key status was `not configured`) | T31 |
 
 ---
+
+# T32 DeepSeek Runtime Model Selection Addendum
+
+| ID | Source | Obligation | Plan Evidence | Verification Method | Status | PLAN Task |
+|---|---|---|---|---|---|---|
+| R067 | T32 user prompt | `harness run` must support a per-run DeepSeek model selector: `--model flash` maps to `deepseek-v4-flash`, `--model pro` maps to `deepseek-v4-pro`, CLI selection overrides `harness.yaml` only for the current run, normal and `--web` paths receive the effective config, invalid aliases are rejected by argparse, no credentials or user-local config files are modified, and README/process docs explain the final usage path. | PLAN.md T32; README.md run/model and directory-structure sections; AGENT_LOG.md LOG-061 | Red/Green/Review commits; CLI target tests; DeepSeek/local WebUI runner regressions; README test; full pytest/Ruff/Mypy/pip check; `harness run --help`; credential scan; git status excludes user-local files from staging | DONE (`896 passed, 5 skipped`; Ruff/Mypy/pip check passed; run help shows `--model {flash,pro}`; tracked-file credential scan found only explicit fake fixture/log strings; user-local `.harness/`, `harness.yaml`, and `workspace/` remained unstaged) | T32 |
+
+---
